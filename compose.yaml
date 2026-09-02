@@ -1,6 +1,6 @@
 services:
   counter-strike:
-    container_name: counter-strike
+    container_name: counter-strike-competitive
 
     # Keeps the HLDS console attached
     stdin_open: true
