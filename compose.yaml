@@ -1,43 +1,46 @@
 services:
-    counter-strike:
-        container_name: counter-strike
+  counter-strike:
+    container_name: counter-strike
 
-        # Keeps the HLDS console attached
-        stdin_open: true
-        tty: true
+    # Keeps the HLDS console attached
+    stdin_open: true
+    tty: true
 
-        # Fixes the 10 second delay when stopping and SIGKILL
-        init: true
+    # Fixes the 10 second delay when stopping and SIGKILL
+    init: true
 
-        # Pasta results in minimal latency whilst still allowing for port mapping
-        network_mode: "pasta"
-        ports:
-            - "27015:27015/udp"
-            - "27015:27015/tcp"
+    # Pasta results in minimal latency whilst still allowing for port mapping
+    network_mode: "pasta"
+    ports:
+      - "27015:27015/udp"
+      - "27015:27015/tcp"
 
-        # Volume where all the files and configs live
-        volumes:
-            - ./cstrike:/opt/hlds/cstrike:U,Z
+    volumes:
+      # Volume where all the files and configs live
+      - ./cstrike:/opt/hlds/cstrike:U,Z
+      # Accurate tz in logs
+      - /etc/localtime:/etc/localtime:ro
 
-        # Automatically restart on reboot
-        restart: always
 
-        # Keep the exact IDs so we can easily edit files owned by the steam user
-        userns_mode: "keep-id"
+    # Automatically restart on reboot
+    restart: always
 
-        # Build and run
-        build:
-            context: .
-            args:
-                # run `id -u` on your host — override here if it's not 1000
-                UID: "1000"
-                # run `id -g` on your host — override here if it's not 1000
-                GID: "1000"
-        command: >
-            ./hlds_run
-            -game cstrike
-            +ip 0.0.0.0
-            +map de_dust2
-            +maxplayers 32
-            +sv_lan 0
-            +exec server.cfg
+    # Keep the exact IDs so we can easily edit files owned by the steam user
+    userns_mode: "keep-id"
+
+    # Build and run
+    build:
+      context: .
+      args:
+        # run `id -u` on your host — override here if it's not 1000
+        UID: "1000"
+        # run `id -g` on your host — override here if it's not 1000
+        GID: "1000"
+    command: >
+      ./hlds_run
+      -game cstrike
+      +ip 0.0.0.0
+      +map de_dust2
+      +maxplayers 32
+      +sv_lan 0
+      +exec server.cfg
