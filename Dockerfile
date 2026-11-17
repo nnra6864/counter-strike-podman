@@ -118,6 +118,8 @@ RUN groupadd -g ${GID} steam && useradd -m -u ${UID} -g ${GID} -s /bin/sh steam
 WORKDIR /opt/hlds
 COPY --from=fetch --chown=${UID}:${GID} /opt/hlds /opt/hlds
 COPY --from=fetch --chown=${UID}:${GID} /home/steam/.steam /home/steam/.steam
+# Applies CVAR_*, AMXX_* and METAMOD_* env vars to the configs on every start
+COPY --chmod=755 env-config.sh env-config.awk /opt/hlds/
 
 RUN <<'EOF' cat > /opt/hlds/entrypoint.sh && chmod +x /opt/hlds/entrypoint.sh && chown steam:steam /opt/hlds/entrypoint.sh
 #!/bin/sh
@@ -127,6 +129,8 @@ if [ -z "$(ls -A /opt/hlds/cstrike 2>/dev/null)" ]; then
   echo "Initializing cstrike directory"
   cp -a /opt/hlds/cstrike_defaults/. /opt/hlds/cstrike/
 fi
+
+/opt/hlds/env-config.sh || echo "[env] failed to apply env vars, starting with configs as they are"
 
 exec "$@"
 EOF

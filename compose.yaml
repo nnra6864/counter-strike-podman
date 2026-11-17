@@ -22,6 +22,16 @@ services:
       - /etc/localtime:/etc/localtime:ro
 
 
+    # Config overrides, applied on every start
+    environment:
+      CVAR_HOSTNAME: "Counter-Strike 1.6 Server"
+      CVAR_SV_PASSWORD: ""
+      # Silence the AMXX ads/notifications
+      AMXX_PLUGIN_SCROLLMSG: "0"
+      AMXX_PLUGIN_IMESSAGE: "0"
+      CVAR_AMX_HELP_DISPLAY_MSG: "0"
+      CVAR_AMX_LANGUAGE_DISPLAY_MSG: "0"
+
     # Automatically restart on reboot
     restart: always
 
