@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 dem = "0.3"
+opus = "0.4.0"

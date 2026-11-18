@@ -85,7 +85,7 @@ Its output is in the container logs, prefixed with `[hltv]`.
 
 #### Voice tracks
 
-`tools/demo-voice` turns a demo's voice chat into one `.mka` with a track per player (work in progress: decoding isn't done yet):
+`tools/demo-voice` turns a demo's voice chat into one `.mka` with a track per player:
 
 ```sh
 cargo build --release --manifest-path tools/demo-voice/Cargo.toml

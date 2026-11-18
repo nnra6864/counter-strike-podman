@@ -236,8 +236,9 @@ fn dump(p: &Parsed) {
 fn render(pl: &Player, len: usize) -> Result<Vec<f32>, String> {
     let mut pcm = vec![0f32; len];
     let mut cursor = 0usize;
+    let mut dec = steamvoice::Decoder::new()?;
     for (t, data) in &pl.packets {
-        let samples = steamvoice::decode(data)?;
+        let samples = dec.decode(data)?;
         // A packet lands at its demo time, or right after the previous one if that overlaps
         let at = ((*t as f64 * SAMPLE_RATE as f64) as usize).max(cursor);
         for (i, s) in samples.iter().enumerate() {

@@ -26,7 +26,7 @@ From the source: ReHLTV writes every `svc_voicedata` it gets into the demo (`Dem
 
 - [x] `hltv_voice.sma` (AMXX + ReAPI): hook `RG_CSGameRules_CanPlayerHearPlayer` and return true when the listener `is_user_hltv`. Players' comms stay team-only
 - [x] `ENABLE_HLTV_VOICE` (1 when HLTV is on): toggles the plugin through `AMXX_PLUGIN_HLTV_VOICE`
-- [ ] Test (2026-11-18: plugin loads, demo records, HLTV console via `/tmp/hltv.in` works; voice not tested yet): record with two clients talking, check the demo for `svc_voicedata` (and that playback in the game client has voice)
+- [x] Test (2026-11-18: one player on CT, voice recorded and decoded; still to check with two players on different teams that each hears only their team): record with two clients talking, check the demo for `svc_voicedata` (and that playback in the game client has voice)
 
 ## 4. Per-player audio tracks (`tools/demo-voice`)
 
@@ -37,7 +37,8 @@ From the source: ReHLTV writes every `svc_voicedata` it gets into the demo (`Dem
 - [x] `--order join` (default, any server): first join. `--order team` (competitive): starting team, T then CT, join order within a team
 - [x] `--tracks team|mix`: one track per starting team, or everyone in one track
 - [x] Each packet is placed at its demo time and muxed to `.mka` (Opus) with ffmpeg
-- [ ] **Decoding.** Steam voice packets are parsed (SteamID, sample rate, silence, SILK/Opus chunks, CRC), but nothing decodes SILK/Opus yet. Run `demo-voice --dump` on the first demo with real voice to confirm the format, then pick a decoder (libopus via the `opus` crate, or the SILK SDK)
+- [x] **Decoding.** Confirmed 2026-11-18 on a real demo: Steam voice, 24 kHz, Opus PLC chunks (u16 len, u16 seq, frame), CRC ok. Decoded with libopus (`opus` crate), one stateful decoder per player, short losses concealed
 - [ ] Packet timing: demo frame time is about 1/updaterate, so check for gaps or jitter once real audio decodes
 - [ ] Per-server default for `--order` (env on the server, e.g. `DEMO_VOICE_ORDER=team`)
 - [ ] Optional: run it automatically after each map (HLTV closes the file on map change)
+- [ ] Later: rewrite the Rust tooling (`tools/demo-voice`) in Zig
