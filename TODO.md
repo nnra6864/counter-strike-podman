@@ -41,4 +41,4 @@ From the source: ReHLTV writes every `svc_voicedata` it gets into the demo (`Dem
 - [ ] Packet timing: demo frame time is about 1/updaterate, so check for gaps or jitter once real audio decodes
 - [ ] Per-server `--order`: regular = `join`, competitive = `team`. Wire up together with auto-extraction (an env var the container passes to the tool)
 - [ ] Optional: run it automatically after each map (HLTV closes the file on map change)
-- [ ] Later: rewrite the Rust tooling (`tools/demo-voice`) in Zig
+- [ ] Rewrite in Zig as its own project: `~/Projects/Zig/goldsrc-hltv-voice` (its own TODO). Auto-extraction and per-server `--order` land with it
