@@ -24,6 +24,16 @@ services:
 
     # Config overrides, applied on every start
     environment:
+      # Components. All 0 = plain ReHLDS
+      ENABLE_REGAMEDLL: "1"
+      ENABLE_METAMOD: "1"
+      ENABLE_AMXMODX: "1"   # needs metamod, includes ReAPI
+      # Replays: records cstrike/demos/hltv-<date>-<map>.dem, with voice.
+      # HLTV takes a player slot, so raise +maxplayers by one
+      ENABLE_HLTV: "0"
+      # HLTV_RECORD: "demos/hltv"
+      # ENABLE_HLTV_VOICE: "1"
+
       CVAR_HOSTNAME: "Counter-Strike 1.6 Server"
       CVAR_SV_PASSWORD: ""
       # Silence the AMXX ads/notifications

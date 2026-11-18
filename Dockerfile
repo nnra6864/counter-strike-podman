@@ -35,11 +35,18 @@ RUN wget https://github.com/rehlds/ReHLDS/releases/download/${REHLDS_VER}/rehlds
     cp -r bin/linux32/* ./ && \
     rm -rf rehlds-bin-${REHLDS_VER}.zip bin
 
+# Keep the stock game dll, for ENABLE_REGAMEDLL=0.
+# If cstrike has no delta.lst the engine falls back to valve's, so keep that one instead
+RUN mkdir -p dist/stock dist/regamedll && \
+    cp cstrike/dlls/cs.so dist/stock/ && \
+    { cp cstrike/delta.lst dist/stock/ 2>/dev/null || cp valve/delta.lst dist/stock/; }
+
 # Download and install ReGameDLL
 RUN wget https://github.com/rehlds/ReGameDLL_CS/releases/download/${REGAMEDLL_VER}/regamedll-bin-${REGAMEDLL_VER}.zip && \
     mkdir -p /tmp/regamedll-bin && \
     unzip -q regamedll-bin-${REGAMEDLL_VER}.zip -d /tmp/regamedll-bin && \
     cp -r /tmp/regamedll-bin/bin/linux32/cstrike/* cstrike/ && \
+    cp cstrike/dlls/cs.so cstrike/delta.lst dist/regamedll/ && \
     rm -rf regamedll-bin-${REGAMEDLL_VER}.zip /tmp/regamedll-bin
 
 # Fix liblist.game crash issue (metamod's gamedll auto-detect expects cs_i386.so)
@@ -66,7 +73,14 @@ RUN wget https://github.com/rehlds/ReAPI/releases/download/${REAPI_VER}/reapi-bi
     unzip -q reapi-bin-${REAPI_VER}.zip -d cstrike/ && \
     rm reapi-bin-${REAPI_VER}.zip
 
-RUN mkdir -p cstrike/logs
+# Compile our own plugins (see plugins/), enabled through env vars
+COPY --chown=steam:steam plugins/ /tmp/plugins/
+RUN cd cstrike/addons/amxmodx/scripting && \
+    for f in /tmp/plugins/*.sma; do \
+        ./amxxpc "$f" -o"../plugins/$(basename "$f" .sma).amxx" || exit 1; \
+    done
+
+RUN mkdir -p cstrike/logs cstrike/demos
 
 # Replace the builtin server config
 RUN <<'EOF' cat > cstrike/server.cfg
@@ -118,8 +132,9 @@ RUN groupadd -g ${GID} steam && useradd -m -u ${UID} -g ${GID} -s /bin/sh steam
 WORKDIR /opt/hlds
 COPY --from=fetch --chown=${UID}:${GID} /opt/hlds /opt/hlds
 COPY --from=fetch --chown=${UID}:${GID} /home/steam/.steam /home/steam/.steam
-# Applies CVAR_*, AMXX_* and METAMOD_* env vars to the configs on every start
-COPY --chmod=755 env-config.sh env-config.awk /opt/hlds/
+# ENABLE_* picks the components, CVAR_*, AMXX_* and METAMOD_* edit the configs, HLTV_* configure HLTV.
+# All applied on every start
+COPY --chmod=755 components.sh env-config.sh env-config.awk hltv.sh /opt/hlds/
 
 RUN <<'EOF' cat > /opt/hlds/entrypoint.sh && chmod +x /opt/hlds/entrypoint.sh && chown steam:steam /opt/hlds/entrypoint.sh
 #!/bin/sh
@@ -130,7 +145,14 @@ if [ -z "$(ls -A /opt/hlds/cstrike 2>/dev/null)" ]; then
   cp -a /opt/hlds/cstrike_defaults/. /opt/hlds/cstrike/
 fi
 
+# Sourced: it sets defaults for env-config.sh
+. /opt/hlds/components.sh
+
 /opt/hlds/env-config.sh || echo "[env] failed to apply env vars, starting with configs as they are"
+
+case $(printf %s "$ENABLE_HLTV" | tr '[:upper:]' '[:lower:]') in
+  1|on|true|yes|enable|enabled) /opt/hlds/hltv.sh & ;;
+esac
 
 exec "$@"
 EOF
