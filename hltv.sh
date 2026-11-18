@@ -6,6 +6,7 @@
 #   HLTV_PORT=27020               HLTV's own port (not published by default)
 #   HLTV_RECORD=demos/hltv        demo name, recorded as <name>-<date>-<map>.dem
 #                                 relative to cstrike/, one file per map. Empty = off
+#   ENABLE_VOICE_MKA=1            write each finished demo's voice to a .mka (voice.sh)
 #   HLTV_<CMD>=value              any other HLTV command, run as +<cmd> value
 #                                 (HLTV_DELAY, HLTV_MAXCLIENTS, HLTV_NAME, HLTV_HOSTNAME, ...)
 #
@@ -40,6 +41,12 @@ done
 if [ -n "$HLTV_RECORD" ]; then
 	mkdir -p "cstrike/$(dirname "$HLTV_RECORD")"
 	add record "$HLTV_RECORD"
+	# A .mka with a track per player next to each finished demo
+	case $(printf %s "${ENABLE_VOICE_MKA:-1}" | tr '[:upper:]' '[:lower:]') in
+	1 | on | true | yes | enable | enabled)
+		/opt/hlds/voice.sh "cstrike/$(dirname "$HLTV_RECORD")" "$(basename "$HLTV_RECORD")" &
+		;;
+	esac
 fi
 add connect "$HLTV_SERVER"
 

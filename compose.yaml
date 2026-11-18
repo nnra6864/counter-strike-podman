@@ -33,6 +33,10 @@ services:
       ENABLE_HLTV: "0"
       # HLTV_RECORD: "demos/hltv"
       # ENABLE_HLTV_VOICE: "1"
+      # A .mka with a track per player next to each finished demo (on with HLTV).
+      # Competitive: "--order team" puts T first, then CT
+      # ENABLE_VOICE_MKA: "1"
+      # VOICE_MKA_ARGS: ""
 
       CVAR_HOSTNAME: "Counter-Strike 1.6 Server"
       CVAR_SV_PASSWORD: ""

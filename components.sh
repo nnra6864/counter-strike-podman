@@ -8,6 +8,8 @@
 #   ENABLE_HLTV=0         HLTV proxy next to the server (see hltv.sh)
 #   ENABLE_HLTV_VOICE=$ENABLE_HLTV   let HLTV hear everyone, so demos have voice
 #                         (needs ReGameDLL and AMX Mod X)
+#   ENABLE_VOICE_MKA=$ENABLE_HLTV    a .mka with a track per player next to each
+#                         finished demo (see voice.sh, VOICE_MKA_ARGS)
 #
 # Binaries are refreshed from the image on every start, so rebuilding the image
 # upgrades them. Configs and plugins in the volume are left alone.
@@ -43,8 +45,8 @@ ensure_dir() {
 }
 
 : "${ENABLE_REGAMEDLL:=1}" "${ENABLE_METAMOD:=1}" "${ENABLE_AMXMODX:=1}" "${ENABLE_HLTV:=0}"
-: "${ENABLE_HLTV_VOICE:=$ENABLE_HLTV}"
-export ENABLE_REGAMEDLL ENABLE_METAMOD ENABLE_AMXMODX ENABLE_HLTV ENABLE_HLTV_VOICE
+: "${ENABLE_HLTV_VOICE:=$ENABLE_HLTV}" "${ENABLE_VOICE_MKA:=$ENABLE_HLTV}"
+export ENABLE_REGAMEDLL ENABLE_METAMOD ENABLE_AMXMODX ENABLE_HLTV ENABLE_HLTV_VOICE ENABLE_VOICE_MKA
 
 # Game dll
 if on "$ENABLE_REGAMEDLL"; then dll=regamedll; else dll=stock; fi
@@ -114,4 +116,5 @@ if [ $amxx = 1 ]; then
 fi
 if on "$ENABLE_HLTV"; then
 	[ $voice = 1 ] && say "HLTV: on, with voice" || say "HLTV: on"
+	on "$ENABLE_VOICE_MKA" && say "voice .mka per demo: on${VOICE_MKA_ARGS:+ ($VOICE_MKA_ARGS)}"
 fi

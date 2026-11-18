@@ -94,16 +94,20 @@ services:
 
 #### Voice tracks
 
-`tools/demo-voice` turns a demo's voice chat into one `.mka` with a track per player:
+With HLTV on, each finished demo also gets a `.mka` next to it, with the voice chat as one Opus track per player, in sync with the demo from the start ([goldsrc-hltv-voice](https://git.nnstdios.com/nnra6864/goldsrc-hltv-voice), built into the image).
+A demo is finished when HLTV moves on to the next map, or when the container starts again after a stop or crash. Demos with no voice get no `.mka`.
+
+| Variable | Default | |
+|---|---|---|
+| `ENABLE_VOICE_MKA` | `ENABLE_HLTV` | a `.mka` per finished demo |
+| `VOICE_MKA_ARGS` | | options: `--order team` (tracks T first, then CT; good for competitive), `--tracks team` or `--tracks mix` (a track per team, or one), `--lenient` (write even if parts of the demo couldn't be read) |
+
+Its output is in the container logs, prefixed with `[voice]`. To run it by hand, on any demo:
 
 ```sh
-cargo build --release --manifest-path tools/demo-voice/Cargo.toml
-tools/demo-voice/target/release/demo-voice cstrike/demos/hltv-....dem --order team   # T first, then CT
-tools/demo-voice/target/release/demo-voice cstrike/demos/hltv-....dem --dump         # who spoke, raw packets
+podman exec counter-strike goldsrc-hltv-voice cstrike/demos/hltv-....dem --order team
+podman exec counter-strike goldsrc-hltv-voice cstrike/demos/hltv-....dem --dump   # who spoke, raw packets
 ```
-
-`--order join` (default) sorts by when players joined, `--order team` by the team they started on.
-`--tracks team` or `--tracks mix` merges players into one track per team, or a single track.
 
 ### Environment variables
 

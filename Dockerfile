@@ -118,7 +118,36 @@ EOF
 RUN mv cstrike cstrike_defaults && mkdir cstrike
 
 
-# Stage 2: minimal runtime
+# Stage 2: goldsrc-hltv-voice, turns each demo's voice chat into a .mka (see voice.sh)
+FROM debian:bookworm-slim AS voice
+
+ARG ZIG_VER=0.17.1
+ARG OPUS_VER=1.6.1
+ARG OPUS_SHA256=6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1
+ARG HLTV_VOICE_REPO=https://git.nnstdios.com/nnra6864/goldsrc-hltv-voice.git
+ARG HLTV_VOICE_REF=5ff59d32ef81af62fed119eea62723df7d863930
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates curl xz-utils git gcc make libc6-dev pkgconf && \
+    rm -rf /var/lib/apt/lists/*
+# libopus from source, linked statically: bookworm's 1.3.1 decodes quiet stretches a little
+# differently from the 1.6.1 the tool is tested with, enough to fail its speech timing tests
+RUN curl -fsSL -o /tmp/opus.tar.gz https://downloads.xiph.org/releases/opus/opus-${OPUS_VER}.tar.gz && \
+    echo "${OPUS_SHA256}  /tmp/opus.tar.gz" | sha256sum -c - && \
+    tar -xzf /tmp/opus.tar.gz -C /tmp && cd /tmp/opus-${OPUS_VER} && \
+    ./configure -q --prefix=/usr/local --disable-shared --disable-doc --disable-extra-programs && \
+    make -s -j"$(nproc)" install && \
+    cd / && rm -rf /tmp/opus*
+RUN curl -fsSL https://ziglang.org/download/${ZIG_VER}/zig-x86_64-linux-${ZIG_VER}.tar.xz | tar -xJ -C /opt && \
+    ln -s /opt/zig-x86_64-linux-${ZIG_VER}/zig /usr/local/bin/zig
+# The tests check voice placement against the reference fixtures, with this libopus
+RUN git clone -q "$HLTV_VOICE_REPO" /src && \
+    git -C /src checkout -q "$HLTV_VOICE_REF" && \
+    cd /src && zig build test && zig build -Doptimize=ReleaseSafe --prefix /out && \
+    /out/bin/goldsrc-hltv-voice --dump testdata/one-player.dem > /dev/null
+
+
+# Stage 3: minimal runtime
 FROM debian:bookworm-slim AS runtime
 
 RUN dpkg --add-architecture i386 && \
@@ -134,6 +163,7 @@ WORKDIR /opt/hlds
 COPY --from=fetch --chown=0:0 /opt/hlds /opt/hlds
 # HLDS looks for steamclient.so in ~/.steam/sdk32
 COPY --from=fetch --chown=0:0 /home/steam/.steam /root/.steam
+COPY --from=voice /out/bin/goldsrc-hltv-voice /usr/local/bin/
 
 EXPOSE 27015/udp 27015/tcp
 ENTRYPOINT ["/opt/hlds/entrypoint.sh"]
@@ -142,4 +172,4 @@ CMD ["./hlds_run", "-game", "cstrike", "+ip", "0.0.0.0", "+map", "de_dust2", "+m
 # Our scripts last, so editing them only rebuilds this small layer.
 # ENABLE_* picks the components, CVAR_*, AMXX_* and METAMOD_* edit the configs, HLTV_* configure HLTV.
 # All applied on every start
-COPY --chmod=755 entrypoint.sh components.sh env-config.sh env-config.awk hltv.sh /opt/hlds/
+COPY --chmod=755 entrypoint.sh components.sh env-config.sh env-config.awk hltv.sh voice.sh /opt/hlds/

@@ -39,6 +39,6 @@ From the source: ReHLTV writes every `svc_voicedata` it gets into the demo (`Dem
 - [x] Each packet is placed at its demo time and muxed to `.mka` (Opus) with ffmpeg
 - [x] **Decoding.** Confirmed 2026-11-18 on a real demo: Steam voice, 24 kHz, Opus PLC chunks (u16 len, u16 seq, frame), CRC ok. Decoded with libopus (`opus` crate), one stateful decoder per player, short losses concealed
 - [ ] Packet timing: demo frame time is about 1/updaterate, so check for gaps or jitter once real audio decodes
-- [ ] Per-server `--order`: regular = `join`, competitive = `team`. Wire up together with auto-extraction (an env var the container passes to the tool)
-- [ ] Optional: run it automatically after each map (HLTV closes the file on map change)
-- [ ] Rewrite in Zig as its own project: `~/Projects/Zig/goldsrc-hltv-voice` (its own TODO). Auto-extraction and per-server `--order` land with it
+- [x] Per-server `--order`: regular = `join`, competitive = `team`: `VOICE_MKA_ARGS: "--order team"` (2026-11-18)
+- [x] Run it automatically after each map (HLTV closes the file on map change): `voice.sh`, `ENABLE_VOICE_MKA` (2026-11-18)
+- [x] Rewrite in Zig as its own project: [goldsrc-hltv-voice](https://git.nnstdios.com/nnra6864/goldsrc-hltv-voice), built in the image (2026-11-18)
