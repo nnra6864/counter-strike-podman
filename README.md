@@ -28,11 +28,50 @@ This might take a few minutes depending on your disk and network speeds.
 
 ## Running
 
-Configure `compose.yaml` and run:
-
 ```sh
 podman compose up -d
 ```
+
+Settings for your server go in a `compose.override.yaml` next to `compose.yaml`, rather than in `compose.yaml` itself.
+podman-compose merges it on top automatically, and it's gitignored, so `git pull` never conflicts with your settings:
+
+```yml
+services:
+  counter-strike:
+    environment:
+      CVAR_HOSTNAME: "My Server"
+```
+
+Environment variables are merged one by one, everything else (`command`, `container_name`, ...) is replaced.
+Keep one `environment:` and one `volumes:` per file: a second one silently replaces the first.
+
+### Competitive
+
+`presets/competitive.yaml` is a ready-made override for 5v5: competitive rules, 10 players plus HLTV, demos recorded with voice, tracks T first, then CT.
+
+```sh
+cp presets/competitive.yaml compose.override.yaml
+```
+
+Then change the RCON password and add your own settings to it.
+
+### More than one server
+
+Clone the repo once per server, each with its own `compose.override.yaml` (at least a different `container_name`).
+Each clone keeps its own `cstrike` dir.
+They all use port 27015 unless you change `ports` in `compose.yaml`, so only one runs at a time by default.
+
+### Files
+
+| | |
+|---|---|
+| `compose.yaml` | the defaults: ports, volumes, environment, command |
+| `compose.override.yaml` | yours, gitignored: what this server changes |
+| `presets/` | ready-made `compose.override.yaml`s |
+| `Dockerfile` | builds the image: ReHLDS, ReGameDLL, Metamod-R, AMX Mod X, ReAPI, the plugins, goldsrc-hltv-voice |
+| `scripts/` | run inside the container on every start: `entrypoint.sh` runs `components.sh` (which components load), `env-config.sh` (applies the environment variables to the configs), and `hltv.sh` (HLTV, which starts `voice.sh` for the `.mka`s) |
+| `plugins/` | our AMX Mod X plugins, compiled into the image |
+| `cstrike/` | the server's files and configs, created on first start, gitignored |
 
 ## Configuring
 
@@ -83,7 +122,7 @@ podman exec counter-strike sh -c 'echo status > /tmp/hltv.in'
 
 Its output is in the container logs, prefixed with `[hltv]`.
 
-To keep demos somewhere else (a bigger disk, for example), mount over `cstrike/demos` in a `compose.override.yaml` next to `compose.yaml`. podman-compose merges it automatically, and it's gitignored, so host-specific paths stay out of the repo:
+To keep demos somewhere else (a bigger disk, for example), mount over `cstrike/demos` in your `compose.override.yaml`:
 
 ```yml
 services:
@@ -111,8 +150,8 @@ podman exec counter-strike goldsrc-hltv-voice cstrike/demos/hltv-....dem --dump 
 
 ### Environment variables
 
-Settings can also be set with environment variables in `compose.yaml`.
-They are applied to the files in `cstrike` on **every** start, so a fork or branch can carry its own settings without touching the volume.
+Settings can also be set with environment variables, in `compose.override.yaml` (see [Running](#running)).
+They are applied to the files in `cstrike` on **every** start, so a server's settings live in its override file, not only in its volume.
 
 | Variable | Edits | Value |
 |---|---|---|

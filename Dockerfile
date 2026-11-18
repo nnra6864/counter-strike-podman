@@ -118,7 +118,7 @@ EOF
 RUN mv cstrike cstrike_defaults && mkdir cstrike
 
 
-# Stage 2: goldsrc-hltv-voice, turns each demo's voice chat into a .mka (see voice.sh)
+# Stage 2: goldsrc-hltv-voice, turns each demo's voice chat into a .mka (see scripts/voice.sh)
 FROM debian:bookworm-slim AS voice
 
 ARG ZIG_VER=0.17.1
@@ -172,4 +172,4 @@ CMD ["./hlds_run", "-game", "cstrike", "+ip", "0.0.0.0", "+map", "de_dust2", "+m
 # Our scripts last, so editing them only rebuilds this small layer.
 # ENABLE_* picks the components, CVAR_*, AMXX_* and METAMOD_* edit the configs, HLTV_* configure HLTV.
 # All applied on every start
-COPY --chmod=755 entrypoint.sh components.sh env-config.sh env-config.awk hltv.sh voice.sh /opt/hlds/
+COPY --chmod=755 scripts/ /opt/hlds/

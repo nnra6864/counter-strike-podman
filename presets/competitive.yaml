@@ -1,0 +1,40 @@
+# Competitive 5v5. Copy to compose.override.yaml (next to compose.yaml) and edit it there:
+#   cp presets/competitive.yaml compose.override.yaml
+# podman-compose merges it on top of compose.yaml: environment variables are added or
+# replaced one by one, the rest is replaced. Put this host's own settings in the sections
+# below rather than appending new ones: a second `environment:` or `volumes:` key replaces
+# the first one silently.
+services:
+  counter-strike:
+    container_name: counter-strike-competitive
+
+    environment:
+      # Record every map, with a .mka per demo, tracks T first, then CT
+      ENABLE_HLTV: "1"
+      VOICE_MKA_ARGS: "--order team"
+
+      CVAR_HOSTNAME: "Competitive"
+      # Change this
+      CVAR_RCON_PASSWORD: "password"
+      # Competitive rules
+      CVAR_MP_TIMELIMIT: "999"
+      CVAR_MP_FREEZETIME: "15"
+      CVAR_MP_ROUNDTIME: "1.75"
+      CVAR_MP_C4TIMER: "35"
+      CVAR_MP_BUYTIME: "0.25"
+      CVAR_MP_FORCECAMERA: "2"
+      CVAR_MP_FRIENDLYFIRE: "1"
+
+    # maxplayers: 10 players + HLTV
+    command: >
+      ./hlds_run
+      -game cstrike
+      +ip 0.0.0.0
+      +map de_dust2
+      +maxplayers 11
+      +sv_lan 0
+      +exec server.cfg
+
+    # volumes:
+    #   # Demos somewhere else, a bigger disk for example
+    #   - /path/to/replays:/opt/hlds/cstrike/demos
