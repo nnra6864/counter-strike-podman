@@ -26,18 +26,22 @@ fi
 
 quote() { case $1 in *[[:space:]]*) printf '"%s"' "$1" ;; *) printf %s "$1" ;; esac; }
 
-set -- -port "$HLTV_PORT"
+# Commands go through the console, not the command line: +commands on the command line
+# were sometimes skipped (HLTV came up unconnected, with its default settings)
+CMDS=""
+add() { CMDS="$CMDS$*
+"; }
 for name in $(env | sed -n 's/^HLTV_\([A-Za-z0-9_]*\)=.*/\1/p' | sort -u); do
 	case $name in SERVER | PORT | RECORD) continue ;; esac
 	eval "value=\${HLTV_$name}"
 	# shellcheck disable=SC2154 # set by eval
-	set -- "$@" "+$(echo "$name" | tr '[:upper:]' '[:lower:]')" "$(quote "$value")"
+	add "$(echo "$name" | tr '[:upper:]' '[:lower:]')" "$(quote "$value")"
 done
 if [ -n "$HLTV_RECORD" ]; then
 	mkdir -p "cstrike/$(dirname "$HLTV_RECORD")"
-	set -- "$@" +record "$HLTV_RECORD"
+	add record "$HLTV_RECORD"
 fi
-set -- "$@" +connect "$HLTV_SERVER"
+add connect "$HLTV_SERVER"
 
 # HLTV's console reads this FIFO. Held open read-write here, so it never sees EOF.
 # Send commands with: podman exec <container> sh -c 'echo status > /tmp/hltv.in'
@@ -48,8 +52,11 @@ exec 3<>"$FIFO"
 # Give the server a head start, autoretry covers the rest
 sleep 5
 while :; do
-	echo "[hltv] starting: ./hltv $*"
-	./hltv "$@" <&3 2>&1 | sed -u 's/^/[hltv] /'
+	echo "[hltv] starting on port $HLTV_PORT, commands:"
+	printf '%s' "$CMDS" | sed 's/^/[hltv]   /'
+	# Queued in the FIFO, read once the console is up
+	printf '%s' "$CMDS" >&3
+	./hltv -port "$HLTV_PORT" <&3 2>&1 | sed -u 's/^/[hltv] /'
 	echo "[hltv] exited, restarting in 10s"
 	sleep 10
 done
