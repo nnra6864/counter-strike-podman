@@ -21,7 +21,6 @@ services:
       # Accurate tz in logs
       - /etc/localtime:/etc/localtime:ro
 
-
     # Config overrides, applied on every start
     environment:
       # Components. All 0 = plain ReHLDS
