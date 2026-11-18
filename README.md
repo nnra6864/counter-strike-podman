@@ -38,22 +38,46 @@ podman-compose merges it on top automatically, and it's gitignored, so `git pull
 ```yml
 services:
   counter-strike:
+    container_name: my-server
     environment:
       CVAR_HOSTNAME: "My Server"
 ```
 
-Environment variables are merged one by one, everything else (`command`, `container_name`, ...) is replaced.
+Settings are layered, each on top of the one before:
+
+1. `presets/defaults.env`: what every server gets (loaded by `compose.yaml`)
+2. any presets your `compose.override.yaml` lists under `env_file:`
+3. your `compose.override.yaml`'s `environment:`
+
 Keep one `environment:` and one `volumes:` per file: a second one silently replaces the first.
 
 ### Competitive
 
-`presets/competitive.yaml` is a ready-made override for 5v5: competitive rules, 10 players plus HLTV, demos recorded with voice, tracks T first, then CT.
+`presets/competitive.env` sets up 5v5: competitive rules, 10 players plus HLTV, every map recorded with voice and a `.mka` with tracks T first, then CT.
+Use it from your `compose.override.yaml`, and put anything of your own on top:
 
-```sh
-cp presets/competitive.yaml compose.override.yaml
+```yml
+services:
+  counter-strike:
+    container_name: counter-strike-competitive
+    env_file:
+      - presets/competitive.env
+    environment:
+      CVAR_HOSTNAME: "My Competitive"
+      CVAR_RCON_PASSWORD: "change me"
 ```
 
-Then change the RCON password and add your own settings to it.
+The preset itself stays in the repo, so `git pull` brings its updates.
+
+### Updating
+
+```sh
+git pull
+podman compose build
+podman compose up -d --force-recreate
+```
+
+`--force-recreate` because podman-compose doesn't notice a new image or a changed env file on its own, and would keep the old container.
 
 ### More than one server
 
@@ -65,9 +89,9 @@ They all use port 27015 unless you change `ports` in `compose.yaml`, so only one
 
 | | |
 |---|---|
-| `compose.yaml` | the defaults: ports, volumes, environment, command |
+| `compose.yaml` | the container: ports, volumes, command |
 | `compose.override.yaml` | yours, gitignored: what this server changes |
-| `presets/` | ready-made `compose.override.yaml`s |
+| `presets/` | settings as env files: `defaults.env` for every server, `competitive.env` on top for 5v5 |
 | `Dockerfile` | builds the image: ReHLDS, ReGameDLL, Metamod-R, AMX Mod X, ReAPI, the plugins, goldsrc-hltv-voice |
 | `scripts/` | run inside the container on every start: `entrypoint.sh` runs `components.sh` (which components load), `env-config.sh` (applies the environment variables to the configs), and `hltv.sh` (HLTV, which starts `voice.sh` for the `.mka`s) |
 | `plugins/` | our AMX Mod X plugins, compiled into the image |
@@ -104,7 +128,7 @@ The binaries (game dll, metamod, AMXX dlls and modules) are refreshed from the i
 With `ENABLE_HLTV: "1"`, an HLTV proxy runs next to the server and records every map to `cstrike/demos/hltv-<date>-<map>.dem`.
 Watch one by copying it to your game's `cstrike` dir and running `viewdemo hltv-....dem` in the console.
 
-HLTV takes a player slot, so raise `+maxplayers` by one.
+HLTV takes a player slot, so raise `MAXPLAYERS` by one.
 It doesn't accept spectators by default (`HLTV_MAXCLIENTS: "0"`): with voice on, it hears both teams.
 
 | Variable | Default | |
@@ -150,7 +174,7 @@ podman exec counter-strike goldsrc-hltv-voice cstrike/demos/hltv-....dem --dump 
 
 ### Environment variables
 
-Settings can also be set with environment variables, in `compose.override.yaml` (see [Running](#running)).
+Settings can also be set with environment variables, in `compose.override.yaml` or a preset (see [Running](#running)).
 They are applied to the files in `cstrike` on **every** start, so a server's settings live in its override file, not only in its volume.
 
 | Variable | Edits | Value |
@@ -181,7 +205,7 @@ podman exec counter-strike /opt/hlds/env-config.sh --list
 
 Replaced lines are kept as `env-original:` comments, and every line written from the environment has an `env-managed:` comment above it.
 Removing a variable restores the original line on the next start.
-Environment changes need the container recreated (`podman compose up -d`), since `podman restart` keeps the old environment.
+Environment changes need the container recreated (`podman compose up -d`, or with `--force-recreate` when only an env file changed), since `podman restart` keeps the old environment.
 Don't hand-edit the `env-managed` lines, they are rewritten on every start.
 
 > [!NOTE]

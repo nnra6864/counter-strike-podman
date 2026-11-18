@@ -39,11 +39,11 @@ From the source: ReHLTV writes every `svc_voicedata` it gets into the demo (`Dem
 - [x] Each packet is placed at its demo time and muxed to `.mka` (Opus) with ffmpeg
 - [x] **Decoding.** Confirmed 2026-11-18 on a real demo: Steam voice, 24 kHz, Opus PLC chunks (u16 len, u16 seq, frame), CRC ok. Decoded with libopus (`opus` crate), one stateful decoder per player, short losses concealed
 - [ ] Packet timing: demo frame time is about 1/updaterate, so check for gaps or jitter once real audio decodes
-- [x] Per-server `--order`: regular = `join`, competitive = `team`: `VOICE_MKA_ARGS: "--order team"`, set by `presets/competitive.yaml` (2026-11-18)
+- [x] Per-server `--order`: regular = `join`, competitive = `team`: `VOICE_MKA_ARGS: "--order team"`, set by `presets/competitive.env` (2026-11-18)
 - [x] Run it automatically after each map (HLTV closes the file on map change): `voice.sh`, `ENABLE_VOICE_MKA` (2026-11-18)
 - [x] Rewrite in Zig as its own project: [goldsrc-hltv-voice](https://git.nnstdios.com/nnra6864/goldsrc-hltv-voice), built in the image (2026-11-18)
 
 ## 5. Layout
 
-- [x] Competitive as `presets/competitive.yaml`, copied to `compose.override.yaml`, instead of a `competitive` branch; every server runs master (2026-11-18)
+- [x] Competitive as a preset instead of a `competitive` branch; every server runs master (2026-11-18). Presets are env files (`presets/defaults.env`, `presets/competitive.env`) listed in `compose.override.yaml`, which goes on top: podman-compose 1.6 `include:` merges the included file last (the preset would win) and `extends:` puts the preset under `compose.yaml` (the defaults would win). `MAXPLAYERS` replaces `+maxplayers` so a preset can set it
 - [x] Container scripts in `scripts/` (2026-11-18)

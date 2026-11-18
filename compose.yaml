@@ -21,29 +21,11 @@ services:
       # Accurate tz in logs
       - /etc/localtime:/etc/localtime:ro
 
-    # Config overrides, applied on every start
-    environment:
-      # Components. All 0 = plain ReHLDS
-      ENABLE_REGAMEDLL: "1"
-      ENABLE_METAMOD: "1"
-      ENABLE_AMXMODX: "1"   # needs metamod, includes ReAPI
-      # Replays: records cstrike/demos/hltv-<date>-<map>.dem, with voice.
-      # HLTV takes a player slot, so raise +maxplayers by one
-      ENABLE_HLTV: "0"
-      # HLTV_RECORD: "demos/hltv"
-      # ENABLE_HLTV_VOICE: "1"
-      # A .mka with a track per player next to each finished demo (on with HLTV).
-      # "--order team" puts T first, then CT (presets/competitive.yaml does)
-      # ENABLE_VOICE_MKA: "1"
-      # VOICE_MKA_ARGS: ""
-
-      CVAR_HOSTNAME: "Counter-Strike 1.6 Server"
-      CVAR_SV_PASSWORD: ""
-      # Silence the AMXX ads/notifications
-      AMXX_PLUGIN_SCROLLMSG: "0"
-      AMXX_PLUGIN_IMESSAGE: "0"
-      CVAR_AMX_HELP_DISPLAY_MSG: "0"
-      CVAR_AMX_LANGUAGE_DISPLAY_MSG: "0"
+    # Settings, applied on every start: presets/defaults.env, then the env files and
+    # `environment:` in compose.override.yaml. Keep `environment:` out of this file, it
+    # would win over the presets
+    env_file:
+      - presets/defaults.env
 
     # Automatically restart on reboot
     restart: always
@@ -51,11 +33,11 @@ services:
     # Build and run
     build:
       context: .
+    # +maxplayers comes from MAXPLAYERS
     command: >
       ./hlds_run
       -game cstrike
       +ip 0.0.0.0
       +map de_dust2
-      +maxplayers 32
       +sv_lan 0
       +exec server.cfg
