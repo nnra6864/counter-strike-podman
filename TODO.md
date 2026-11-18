@@ -28,9 +28,9 @@ From the source: ReHLTV writes every `svc_voicedata` it gets into the demo (`Dem
 - [x] `ENABLE_HLTV_VOICE` (1 when HLTV is on): toggles the plugin through `AMXX_PLUGIN_HLTV_VOICE`
 - [x] Test (2026-11-18: one player on CT, voice recorded and decoded; still to check with two players on different teams that each hears only their team): record with two clients talking, check the demo for `svc_voicedata` (and that playback in the game client has voice)
 
-## 4. Per-player audio tracks (`tools/demo-voice`)
+## 4. Per-player audio tracks (goldsrc-hltv-voice)
 
-`demo-voice <demo.dem> [-o out.mka] [--tracks player|team|mix] [--order join|team] [--dump]`
+`goldsrc-hltv-voice <demo.dem> [-o out.mka] [--tracks player|team|mix] [--order join|team] [--dump] [--lenient]`. Prototyped in Rust as `tools/demo-voice` (removed 2026-11-18, see git history)
 
 - [x] Parse the demo with the `dem` crate. Every frame parses (checked on a real ReHLTV demo)
 - [x] One track per player, named after them, with the SteamID in a `STEAMID` tag. Keyed by `*sid`, so a rejoin, even in another slot, continues the same track. HLTV (`*hltv`) is skipped
