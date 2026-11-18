@@ -83,6 +83,19 @@ podman exec counter-strike sh -c 'echo status > /tmp/hltv.in'
 
 Its output is in the container logs, prefixed with `[hltv]`.
 
+#### Voice tracks
+
+`tools/demo-voice` turns a demo's voice chat into one `.mka` with a track per player (work in progress: decoding isn't done yet):
+
+```sh
+cargo build --release --manifest-path tools/demo-voice/Cargo.toml
+tools/demo-voice/target/release/demo-voice cstrike/demos/hltv-....dem --order team   # T first, then CT
+tools/demo-voice/target/release/demo-voice cstrike/demos/hltv-....dem --dump         # who spoke, raw packets
+```
+
+`--order join` (default) sorts by when players joined, `--order team` by the team they started on.
+`--tracks team` or `--tracks mix` merges players into one track per team, or a single track.
+
 ### Environment variables
 
 Settings can also be set with environment variables in `compose.yaml`.
