@@ -83,6 +83,15 @@ podman exec counter-strike sh -c 'echo status > /tmp/hltv.in'
 
 Its output is in the container logs, prefixed with `[hltv]`.
 
+To keep demos somewhere else (a bigger disk, for example), mount over `cstrike/demos` in a `compose.override.yaml` next to `compose.yaml`. podman-compose merges it automatically, and it's gitignored, so host-specific paths stay out of the repo:
+
+```yml
+services:
+  counter-strike:
+    volumes:
+      - /path/to/replays:/opt/hlds/cstrike/demos
+```
+
 #### Voice tracks
 
 `tools/demo-voice` turns a demo's voice chat into one `.mka` with a track per player:

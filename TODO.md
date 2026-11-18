@@ -18,7 +18,7 @@ ReHLDS ships the open-source ReHLTV (`hltv`, `proxy.so`, `core.so`), already in 
 - [x] `HLTV_<CMD>=value` is passed as `+<cmd> value` (`HLTV_DELAY`, `HLTV_MAXCLIENTS`, `HLTV_NAME`, ...). `HLTV_RECORD=demos/match` records `demos/match-<date>-<map>.dem`, one file per map
 - [x] Defaults: record on, `maxclients 0` (no live spectators, since it can hear both teams), port 27020 not published
 - [x] HLTV takes a player slot: competitive needs `+maxplayers 11` (competitive branch, 2026-11-18)
-- [ ] Demos land in `cstrike/demos/`. Prune old ones? (kivotos snapshots this dir, so size matters)
+- [x] Demos go to the HDD instead of being pruned: `compose.override.yaml` (gitignored, per host) mounts `/tank/media/Replays/Counter-Strike_1.6/<Regular|Competitive>` over `cstrike/demos`
 
 ## 3. Voice in demos
 
@@ -39,6 +39,6 @@ From the source: ReHLTV writes every `svc_voicedata` it gets into the demo (`Dem
 - [x] Each packet is placed at its demo time and muxed to `.mka` (Opus) with ffmpeg
 - [x] **Decoding.** Confirmed 2026-11-18 on a real demo: Steam voice, 24 kHz, Opus PLC chunks (u16 len, u16 seq, frame), CRC ok. Decoded with libopus (`opus` crate), one stateful decoder per player, short losses concealed
 - [ ] Packet timing: demo frame time is about 1/updaterate, so check for gaps or jitter once real audio decodes
-- [ ] Per-server default for `--order` (env on the server, e.g. `DEMO_VOICE_ORDER=team`)
+- [ ] Per-server `--order`: regular = `join`, competitive = `team`. Wire up together with auto-extraction (an env var the container passes to the tool)
 - [ ] Optional: run it automatically after each map (HLTV closes the file on map change)
 - [ ] Later: rewrite the Rust tooling (`tools/demo-voice`) in Zig
