@@ -111,15 +111,15 @@ exec banned.cfg
 mp_consistency 0
 EOF
 
-# Clone cstrike for preserving default values
-RUN cp -a cstrike cstrike_defaults
+# Pristine copy of cstrike. ./cstrike is a bind mount, which hides the image's cstrike dir and
+# is never filled from the image, so the entrypoint seeds an empty one from here, and
+# components.sh restores missing addons and refreshes binaries from it.
+# Moved, not copied: the image's own cstrike would only be hidden by the mount anyway
+RUN mv cstrike cstrike_defaults && mkdir cstrike
 
 
 # Stage 2: minimal runtime
 FROM debian:bookworm-slim AS runtime
-
-ARG UID=1000
-ARG GID=1000
 
 RUN dpkg --add-architecture i386 && \
     apt-get update && \
@@ -127,39 +127,19 @@ RUN dpkg --add-architecture i386 && \
     update-ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-RUN groupadd -g ${GID} steam && useradd -m -u ${UID} -g ${GID} -s /bin/sh steam
-
+# Runs as root inside the container. Under rootless podman that is the host user, so files
+# in ./cstrike stay owned by you and editable without `podman unshare`, with no keep-id
+# (keep-id makes podman copy and chown the whole image on every new image)
 WORKDIR /opt/hlds
-COPY --from=fetch --chown=${UID}:${GID} /opt/hlds /opt/hlds
-COPY --from=fetch --chown=${UID}:${GID} /home/steam/.steam /home/steam/.steam
-# ENABLE_* picks the components, CVAR_*, AMXX_* and METAMOD_* edit the configs, HLTV_* configure HLTV.
-# All applied on every start
-COPY --chmod=755 components.sh env-config.sh env-config.awk hltv.sh /opt/hlds/
-
-RUN <<'EOF' cat > /opt/hlds/entrypoint.sh && chmod +x /opt/hlds/entrypoint.sh && chown steam:steam /opt/hlds/entrypoint.sh
-#!/bin/sh
-set -e
-
-if [ -z "$(ls -A /opt/hlds/cstrike 2>/dev/null)" ]; then
-  echo "Initializing cstrike directory"
-  cp -a /opt/hlds/cstrike_defaults/. /opt/hlds/cstrike/
-fi
-
-# Sourced: it sets defaults for env-config.sh
-. /opt/hlds/components.sh
-
-/opt/hlds/env-config.sh || echo "[env] failed to apply env vars, starting with configs as they are"
-
-case $(printf %s "$ENABLE_HLTV" | tr '[:upper:]' '[:lower:]') in
-  1|on|true|yes|enable|enabled) /opt/hlds/hltv.sh & ;;
-esac
-
-exec "$@"
-EOF
-
-USER steam
-ENTRYPOINT ["/opt/hlds/entrypoint.sh"]
+COPY --from=fetch --chown=0:0 /opt/hlds /opt/hlds
+# HLDS looks for steamclient.so in ~/.steam/sdk32
+COPY --from=fetch --chown=0:0 /home/steam/.steam /root/.steam
 
 EXPOSE 27015/udp 27015/tcp
-
+ENTRYPOINT ["/opt/hlds/entrypoint.sh"]
 CMD ["./hlds_run", "-game", "cstrike", "+ip", "0.0.0.0", "+map", "de_dust2", "+maxplayers", "32", "+sv_lan", "0"]
+
+# Our scripts last, so editing them only rebuilds this small layer.
+# ENABLE_* picks the components, CVAR_*, AMXX_* and METAMOD_* edit the configs, HLTV_* configure HLTV.
+# All applied on every start
+COPY --chmod=755 entrypoint.sh components.sh env-config.sh env-config.awk hltv.sh /opt/hlds/
