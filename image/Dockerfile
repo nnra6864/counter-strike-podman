@@ -192,8 +192,7 @@ ENTRYPOINT ["/opt/hlds/entrypoint.sh"]
 CMD ["./hlds_run", "-game", "cstrike", "+map", "de_dust2"]
 
 # `podman exec <container> cs <command>`: reload, tags, save, console (see scripts/cs.sh).
-# packs is the older name for cs reload
-RUN ln -s /opt/hlds/cs.sh /usr/local/bin/cs && ln -s /opt/hlds/packs.sh /usr/local/bin/packs
+RUN ln -s /opt/hlds/cs.sh /usr/local/bin/cs
 
 # Our scripts last, so editing them only rebuilds this small layer.
 # ENABLE_* picks the components, data/packlist the maps, CVAR_*, AMXX_* and METAMOD_* edit the configs, HLTV_* configure HLTV.

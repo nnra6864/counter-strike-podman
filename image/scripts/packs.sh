@@ -4,7 +4,7 @@
 # on every start, and by hand after editing the list, while the server runs (new maps and
 # plugins work from the next map change):
 #
-#   podman exec <container> cs reload   (packs is the same)
+#   podman exec <container> cs reload
 #   podman exec <container> cs save <download> [dir]      keep a download in packs/
 #   podman exec <container> cs tags                       every tag and what has it
 #
@@ -104,7 +104,7 @@ case $SERVER in */* | .*) say "warning: $SERVER: not a usable server name" && SE
 mkdir -p "$DATA" "$PACKS" "$DOWNLOADS" "$CACHE"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-# One run at a time per library: several servers, or a start and `packs` at once
+# One run at a time per library: several servers, or a start and `cs reload` at once
 if command -v flock >/dev/null; then
 	exec 9>"$LIB/.lock"
 	flock -w 1800 9 || say "warning: another run holds $LIB/.lock, going ahead anyway"

@@ -14,7 +14,7 @@ fi
 # Maps and other packs (data/packlist), linked into cstrike. Before env-config.sh: a pack
 # can bring plugins
 /opt/hlds/packs.sh || echo "[packs] failed, starting with the maps cstrike has"
-# The map cycle from the packs (MAPCYCLE). Set even while it's empty, so `packs` can fill
+# The map cycle from the packs (MAPCYCLE). Set even while it's empty, so `cs reload` can fill
 # it later
 case $(printf %s "${MAPCYCLE:-1}" | tr '[:upper:]' '[:lower:]') in
 1 | on | true | yes | enable | enabled)
