@@ -35,7 +35,7 @@ services:
     # Automatically restart on reboot
     restart: always
 
-    # Build. The command is the image's (Dockerfile CMD), with +maxplayers and +map from
+    # Build, from image/. The command is the image's (Dockerfile CMD), with +maxplayers and +map from
     # MAXPLAYERS and MAP. Everything else is a cvar
     build:
-      context: .
+      context: image

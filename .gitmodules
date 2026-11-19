@@ -1,6 +1,6 @@
 [submodule "plugins/hltv-tools"]
-	path = plugins/hltv-tools
+	path = image/plugins/hltv-tools
 	url = ../hltv-tools
 [submodule "tools/goldsrc-demo-tools"]
-	path = tools/goldsrc-demo-tools
+	path = image/tools/goldsrc-demo-tools
 	url = ../goldsrc-demo-tools

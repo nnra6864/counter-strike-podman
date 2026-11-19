@@ -76,7 +76,7 @@ RUN wget https://github.com/rehlds/ReAPI/releases/download/${REAPI_VER}/reapi-bi
 # Compile our own plugins (plugins/, git submodules), enabled through env vars
 COPY --chown=steam:steam plugins/ /tmp/plugins/
 RUN [ -f /tmp/plugins/hltv-tools/hltv_tools.sma ] || { \
-        echo "plugins/hltv-tools is empty: run git submodule update --init" >&2; exit 1; }
+        echo "image/plugins/hltv-tools is empty: run git submodule update --init" >&2; exit 1; }
 RUN cd cstrike/addons/amxmodx/scripting && \
     for f in /tmp/plugins/*/*.sma; do \
         ./amxxpc "$f" -o"../plugins/$(basename "$f" .sma).amxx" || exit 1; \
@@ -157,7 +157,7 @@ RUN curl -fsSL https://ziglang.org/download/${ZIG_VER}/zig-x86_64-linux-${ZIG_VE
 # reference fixtures, with this libopus
 COPY tools/goldsrc-demo-tools/ /src/
 RUN [ -f /src/build.zig ] || { \
-        echo "tools/goldsrc-demo-tools is empty: run git submodule update --init" >&2; exit 1; }
+        echo "image/tools/goldsrc-demo-tools is empty: run git submodule update --init" >&2; exit 1; }
 RUN cd /src && zig build test && zig build -Doptimize=ReleaseSafe --prefix /out && \
     /out/bin/goldsrc-demo-tools voice testdata/one-player.dem --dump > /dev/null
 

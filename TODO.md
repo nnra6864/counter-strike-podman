@@ -61,5 +61,6 @@ From the source: ReHLTV writes every `svc_voicedata` it gets into the demo (`Dem
 - [x] Shared library on `/opt/hlds/library`: one copy of every file for all servers, per-server `servers/<name>` so a download goes once no server lists it, a lock so servers don't run at once (2026-11-19)
 - [x] FastDL: `FASTDL_URL` sets `sv_downloadurl` and writes `fastdl/<name>/`, relative links to exactly this server's files, for Angie (2026-11-19)
 - [ ] HTTPS for `sv_downloadurl`: unknown whether the client supports it. Test: `FASTDL_URL: https://...`, join with a map you don't have, watch the console
+- [x] Build files in `image/` (Dockerfile, scripts, the plugin and tool submodules), so the repo's top is what you touch to run a server (2026-11-19)
 - [ ] `data/plugins/`: AMXX plugins (`.sma`/`.amxx`) listed, compiled, linked and enabled the same way
 - [ ] A competitive map pool for `presets/competitive.env`? (a packlist is per server, so maybe `presets/competitive.packlist` to copy)

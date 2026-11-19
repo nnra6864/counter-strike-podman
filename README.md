@@ -102,10 +102,11 @@ They all use port 27015 unless you change `ports` in `compose.yaml`, so only one
 | `compose.yaml` | the container: ports, volumes, restart policy |
 | `compose.override.yaml` | yours, gitignored: what this server changes |
 | `presets/` | settings as env files: `defaults.env` for every server, `competitive.env` on top for 5v5 |
-| `Dockerfile` | builds the image: ReHLDS, ReGameDLL, Metamod-R, AMX Mod X, ReAPI, the plugins, goldsrc-demo-tools |
-| `scripts/` | run inside the container on every start: `entrypoint.sh` runs `components.sh` (which components load), `packs.sh` (links the maps in, also the `packs` command, see [Maps](#maps)), `env-config.sh` (applies the environment variables to the configs), and `hltv.sh` (HLTV, recording while players are on; it starts `demos.sh`, which repairs, deletes or writes a `.mka` for each finished demo) |
-| `plugins/` | our AMX Mod X plugins, compiled into the image: [hltv-tools](https://github.com/nnra6864/hltv-tools) (a git submodule) |
-| `tools/` | [goldsrc-demo-tools](https://github.com/nnra6864/goldsrc-demo-tools) (a git submodule), built into the image |
+| `image/` | what the image is built from; nothing in it needs editing to run a server |
+| `image/Dockerfile` | builds the image: ReHLDS, ReGameDLL, Metamod-R, AMX Mod X, ReAPI, the plugins, goldsrc-demo-tools |
+| `image/scripts/` | run inside the container on every start: `entrypoint.sh` runs `components.sh` (which components load), `packs.sh` (links the maps in, also the `packs` command, see [Maps](#maps)), `env-config.sh` (applies the environment variables to the configs), and `hltv.sh` (HLTV, recording while players are on; it starts `demos.sh`, which repairs, deletes or writes a `.mka` for each finished demo) |
+| `image/plugins/` | our AMX Mod X plugins, compiled into the image: [hltv-tools](https://github.com/nnra6864/hltv-tools) (a git submodule) |
+| `image/tools/` | [goldsrc-demo-tools](https://github.com/nnra6864/goldsrc-demo-tools) (a git submodule), built into the image |
 | `cstrike/` | the server's files and configs, created on first start, gitignored |
 | `data/` | ours, gitignored: the packlist, packs, downloads, FastDL, see [Maps](#maps) |
 
@@ -265,7 +266,7 @@ Every finished demo is handled once, in the background:
 - **Deleted** if nobody joined (`DELETE_EMPTY_DEMOS`). HLTV and bots don't count; anyone who connected does.
 - Otherwise it gets a **`.mka`** next to it, with the voice chat as one Opus track per player, in sync with the demo from the start. Demos with no voice get no `.mka`.
 
-This uses [goldsrc-demo-tools](https://github.com/nnra6864/goldsrc-demo-tools) (`tools/`), built into the image.
+This uses [goldsrc-demo-tools](https://github.com/nnra6864/goldsrc-demo-tools) (`image/tools/`), built into the image.
 
 | Variable | Default | |
 |---|---|---|
