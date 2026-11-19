@@ -145,6 +145,7 @@ They live in `data/`, next to `cstrike/`: `data/` is what you put together, `cst
 data/
   packlist           which packs this server uses
   packs/             yours: put whatever you like in it, in any dirs
+  tags               which packs and maps have which tags, see Tags below
   downloads/<name>/  from URLs in the packlist, deleted once no packlist has them
   fastdl/<server>/   what players download, see FastDL below
   .cache/            archives from packs/ unpacked, plugins compiled
@@ -152,13 +153,12 @@ data/
 
 A pack in `packs/` is a dir laid out like `cstrike`, or a file as you downloaded it: a `.zip`, `.rar` or `.7z` (whatever its layout), a `.bsp`, a plugin's `.sma` or `.amxx`.
 Archives are unpacked into `.cache/` when used, and again when they change; the file itself is never touched.
-Dirs that aren't packs just group them, so `packs/` can look like this:
+Dirs that aren't packs just group them, for keeping things in order; to pick packs by what they are, use [tags](#tags). `packs/` can look like this:
 
 ```
 packs/
   maps/
     fy_snow.zip
-  xmas/
     de_dust2_xmas_2.zip
   plugins/
     knife_round.zip
@@ -174,6 +174,10 @@ The first start writes one with `default` and `*`.
 | In the packlist | |
 |---|---|
 | `default` | the maps CS ships with |
+| `fy_snow` | a pack or a map by name, wherever it is in `packs/`: `fy_snow.zip`, or the pack with `fy_snow.bsp` in it (only that map from it). Patterns work: `aim_*` |
+| `@snow` | everything with this tag, see [Tags](#tags) |
+| `@snow+competitive` | everything with both tags |
+| `-@xmas` | leave out everything with this tag, from whichever pack |
 | `mypack` | `packs/mypack`: a dir, or `mypack.zip` (`.rar`, `.7z`, `.bsp`, `.sma`, `.amxx`) |
 | `maps/fy_snow` | `packs/maps/fy_snow.zip` |
 | `maps` | every pack in `packs/maps` |
@@ -189,12 +193,14 @@ The first start writes one with `default` and `*`.
 default
 -cs_*
 -as_*
-maps
-xmas/de_dust2_xmas_2
-plugins/knife_round
+@snow
+-@xmas
+knife_round
 https://gamebanana.com/mods/83651
 aim=https://example.com/aim_maps.zip
 ```
+
+Packs and maps left out (`-cs_*`, `-@xmas`) are left out wherever the packlist names them, before or after. A pack none of whose maps are wanted is left out whole, with its models and sounds.
 
 After editing it, while the server runs:
 
@@ -210,6 +216,41 @@ If `MAP` is one the packs left out, the server starts on the first map in the cy
 
 The links are listed in `cstrike/packs_links.txt` and taken down each time before the new ones go up. Files already in `cstrike` (not links) are never replaced, so maps put straight into `cstrike/maps` still work.
 Volumes from before packs have the stock maps as files in `cstrike/maps`: the first start removes the ones that are the same as the image's, and links them back from `default`.
+
+#### Tags
+
+A map can be snow, xmas and competitive all at once, which no dir layout can say. The `tags` file next to `packs/` (in the library, shared by the servers that use it) says which packs and maps have which tags, under headers, from either side:
+
+```ini
+[tag.snow]
+fy_snow
+de_dust2_xmas
+
+[tag.xmas] de_dust2_xmas
+
+[map.fy_snow] winter arena
+
+[tag.arena] aim_* awp_*
+
+[plugin.knife_round] competitive
+
+[tag.competitive]
+@competitive_maps
+knife_round
+```
+
+- `[tag.X]` lists what has tag X. `[map.X]` lists the tags X has; `[plugin.X]` and `[pack.X]` are the same, for reading.
+- The names go on the header's line or below it, as many per line as you like, up to the next header. `#` for comments.
+- The same header can come more than once, and they add up.
+- A name is a pack (its file or dir name, wherever it is in `packs/`), a map in one, or a pack's path (`maps/fy_snow`). Patterns work.
+- `@tag` in a tag is everything with that other tag.
+
+In the packlist, `@snow` is everything tagged snow, `@snow+competitive` everything with both, `-@xmas` leaves them out. Tags name what's in `packs/`; for a download, `packs save` it first.
+The first start writes a `tags` file with only comments. To see every tag and what has it, and warnings for names that match nothing:
+
+```sh
+podman exec counter-strike packs tags
+```
 
 #### Plugins
 

@@ -6,6 +6,7 @@
 #
 #   podman exec <container> packs
 #   podman exec <container> packs save <download> [dir]   keep a download in packs/
+#   podman exec <container> packs tags                    every tag and what has it
 #
 # data/packlist says which packs, in order; the first one wins a file two packs have. One
 # per line, # for comments:
@@ -16,6 +17,10 @@
 #   maps           every pack in packs/maps
 #   maps/de_*      the packs in it with these names
 #   mypack/de_*    only these maps from it (and its other files)
+#   fy_snow        a pack or a map by name, wherever it is in packs/ (fy_*: patterns)
+#   @snow          everything with this tag in the library's tags file (see Tags below)
+#   @snow+arena    everything with both
+#   -@xmas         leave out everything with this tag
 #   *              every pack in packs/
 #   -cs_*          leave these maps out, whichever pack has them
 #   URL            downloaded into downloads/ once: a GameBanana page
@@ -114,6 +119,9 @@ if [ ! -f "$LIST" ]; then
 	#   default        the maps CS ships with
 	#   mypack         packs/mypack: a dir, or mypack.zip/.rar/.7z/.bsp/.sma/.amxx
 	#   maps/mypack    packs/maps/mypack (maps/ only groups them)
+	#   fy_snow        a pack or a map by name, wherever it is in packs/
+	#   @snow          everything with this tag (the tags file, next to packs/)
+	#   @snow+arena    with both tags. -@xmas: leave them out
 	#   maps           every pack in packs/maps
 	#   mypack/de_*    only these maps from it
 	#   *              every pack in packs/
@@ -444,7 +452,7 @@ fi
 # The list ------------------------------------------------------------------------------
 
 # entries: <pack dir> <tab> <maps filter, empty = all>. keep: downloads this server uses
-: >"$TMP/entries" && : >"$TMP/excludes" && : >"$TMP/keep" && : >"$TMP/fastdl" && : >"$TMP/plugins"
+: >"$TMP/entries" && : >"$TMP/excludes" && : >"$TMP/xpacks" && : >"$TMP/keep" && : >"$TMP/fastdl" && : >"$TMP/plugins"
 entry() { printf '%s\t%s\n' "$1" "$2" >>"$TMP/entries"; }
 
 # A file in packs/ that can be a pack
@@ -564,6 +572,225 @@ resolve() (
 	expand "$dir" '*' ""
 )
 
+# Tags ----------------------------------------------------------------------------------
+# The library's tags file says which packs and maps have which tags, under headers:
+#   [tag.snow] fy_snow de_dust2_xmas    what has tag snow (names on the header's line or
+#                                       below it, until the next header)
+#   [map.fy_snow] winter arena          the tags fy_snow has. [plugin.x] and [pack.x] are
+#                                       the same, for reading
+#   [tag.competitive] @competitive_maps knife_round   @tag: everything with that tag
+# A name is a pack (its file or dir name, wherever it is in packs/), a map in one, or a
+# pack's path in packs/ (maps/fy_snow), and can be a pattern (aim_*). The same header
+# can come more than once. In the packlist: @snow, @snow+competitive (both), -@xmas
+
+# The index: every pack in packs/ and its maps, one line per map (a pack without maps
+# has one, with no map): <path in packs/, no extension> <tab> <name> <tab> <map> <tab>
+# <file or dir>
+index_walk() (
+	for c in "$1"/*; do
+		[ -e "$c" ] || continue
+		if is_pack_file "$c" || is_pack_dir "$c"; then
+			n=${c##*/}
+			is_pack_file "$c" && n=${n%.*}
+			rel=${c#"$PACKS"/}
+			is_pack_file "$c" && rel=${rel%.*}
+			pack_maps "$c" | awk -v rel="$rel" -v n="$n" -v c="$c" '
+				{ print rel "\t" n "\t" $0 "\t" c; any = 1 }
+				END { if (!any) print rel "\t" n "\t\t" c }'
+		elif [ -d "$c" ]; then
+			index_walk "$c"
+		fi
+	done
+)
+
+# The maps in pack $1: from its dir, the unpacked copy, or the archive's listing (kept in
+# the cache with the file's size and time)
+pack_maps() {
+	if [ -d "$1" ]; then
+		find "$1/maps" -maxdepth 1 -type f -name '*.bsp' 2>/dev/null | sed 's|.*/||; s|\.bsp$||' | sort
+		return 0
+	fi
+	n=${1##*/}
+	case $(lower "$n") in
+	*.bsp) printf '%s\n' "${n%.*}" | tr '[:upper:]' '[:lower:]' && return 0 ;;
+	*.sma | *.amxx) return 0 ;;
+	esac
+	stamp="$LAYOUT $(stat -c '%s %Y' "$1")"
+	c=$CACHE/packs/${1#"$PACKS"/}
+	if [ "$(cat "$c/.stamp" 2>/dev/null)" = "$stamp" ]; then
+		pack_maps "$c"
+		return 0
+	fi
+	l=$CACHE/index/${1#"$PACKS"/}.maps
+	if [ "$(head -n 1 "$l" 2>/dev/null)" != "$stamp" ]; then
+		mkdir -p "${l%/*}"
+		{
+			printf '%s\n' "$stamp"
+			LC_ALL=C.UTF-8 bsdtar -tf "$1" 2>/dev/null | sed -n 's|.*/||; s|\.[bB][sS][pP]$||p' | sort -u
+		} >"$l"
+	fi
+	tail -n +2 "$l"
+}
+
+INDEX=$TMP/index
+index() {
+	[ -f "$INDEX" ] || index_walk "$PACKS" >"$INDEX"
+}
+
+TAGS=$LIB/tags
+if [ ! -f "$TAGS" ]; then
+	cat >"$TAGS" <<-'EOF'
+	# Tags for the packs in packs/, for packlists to pick them by: @snow, @snow+competitive
+	# (both), -@xmas (leave those out). Names on a header's line or below it:
+	#
+	#   [tag.snow] fy_snow de_dust2_xmas    what has a tag
+	#   [map.fy_snow] winter arena          or the tags a map has ([plugin.x], [pack.x] too)
+	#   [tag.arena] fy_* aim_*              patterns
+	#   [tag.competitive] @competitive_maps knife_round   @tag: all of another tag
+	#
+	# A name is a pack (its file or dir name, wherever it is in packs/), a map in one, or a
+	# pack's path (maps/fy_snow). After editing: podman exec <container> packs tags
+	EOF
+fi
+
+# tags <mode> [arg]: query <a+b>: <file> <tab> <map> of everything with all those tags.
+# match <name>: the same for a name. check: warns about names that match nothing.
+# list: every tag and what has it
+tags() {
+	index
+	awk -v mode="$1" -v q="${2:-}" -v indexf="$INDEX" '
+	function warn(m) { print "[packs] " m > "/dev/stderr" }
+	# Mistakes in the file: once, by check
+	function bad(m) { if (mode == "check") warn(m) }
+	function glob2re(g,    r, i, j, c, n) {
+		r = "^"
+		n = length(g)
+		for (i = 1; i <= n; i++) {
+			c = substr(g, i, 1)
+			if (c == "*") r = r ".*"
+			else if (c == "?") r = r "."
+			else if (c == "[" && (j = index(substr(g, i + 1), "]")) > 0) { r = r substr(g, i, j + 1); i += j }
+			else if (index(".+^$(){}|\\[]", c)) r = r "\\" c
+			else r = r c
+		}
+		return r "$"
+	}
+	function matches(m, j,    re) {
+		re = glob2re(tolower(m))
+		return tolower(iname[j]) ~ re || tolower(imap[j]) ~ re || tolower(irel[j]) ~ re
+	}
+	function add(t, m) {
+		t = tolower(t)
+		sub(/^@/, "", t)
+		known[t] = 1
+		if (!(t in seen)) { seen[t] = 1; torder[++nt] = t }
+		mem[t, ++nmem[t]] = m
+		where[t, nmem[t]] = hdr
+	}
+	function set_of(t,    i, j, m, u) {
+		if (t in done) return
+		done[t] = 1
+		for (i = 1; i <= nmem[t]; i++) {
+			m = mem[t, i]
+			if (m ~ /^@/) {
+				u = tolower(substr(m, 2))
+				set_of(u)
+				for (j = 1; j <= n; j++) if ((u, j) in S) S[t, j] = 1
+			} else
+				for (j = 1; j <= n; j++) if (matches(m, j)) S[t, j] = 1
+		}
+	}
+	FILENAME == indexf { n++; split($0, f, "\t"); irel[n] = f[1]; iname[n] = f[2]; imap[n] = f[3]; ipath[n] = f[4]; next }
+	{ sub(/#.*/, "") }
+	{
+		for (i = 1; i <= NF; i++) {
+			w = $i
+			if (w ~ /^\[.*\]$/) {
+				h = tolower(substr(w, 2, length(w) - 2))
+				k = h
+				sub(/\..*$/, "", k)
+				key = substr(h, length(k) + 2)
+				hdr = w
+				if (key == "") hm = "bad"
+				else if (k == "tag") hm = "tag"
+				else if (k == "map" || k == "plugin" || k == "pack") hm = "item"
+				else hm = "bad"
+				if (hm == "bad") bad("tags: " w ": not a header like [tag.snow] or [map.fy_snow], skipping what is under it")
+				continue
+			}
+			if (hm == "tag") add(key, w)
+			else if (hm == "item") add(w, key)
+			else if (hm == "" && !toplevel++) bad("tags: " w ": before any header, skipped")
+		}
+	}
+	END {
+		if (mode == "query") {
+			np = split(tolower(q), parts, "+")
+			for (p = 1; p <= np; p++) {
+				if (!(parts[p] in known)) { warn("@" q ": no tag " parts[p] " in the tags file"); exit }
+				set_of(parts[p])
+			}
+			for (j = 1; j <= n; j++) {
+				all = 1
+				for (p = 1; p <= np; p++) if (!((parts[p], j) in S)) { all = 0; break }
+				if (all) print ipath[j] "\t" imap[j]
+			}
+		} else if (mode == "match") {
+			for (j = 1; j <= n; j++) if (matches(q, j)) print ipath[j] "\t" imap[j]
+		} else if (mode == "check") {
+			for (t in nmem) for (i = 1; i <= nmem[t]; i++) {
+				m = mem[t, i]
+				if (m ~ /^@/) {
+					if (!(tolower(substr(m, 2)) in known)) warn("tags: " where[t, i] ": " m ": no such tag")
+					continue
+				}
+				hit = 0
+				for (j = 1; j <= n; j++) if (matches(m, j)) { hit = 1; break }
+				if (!hit) warn("tags: " where[t, i] ": " m ": no pack or map by that name in packs/")
+			}
+		} else if (mode == "list") {
+			for (x = 1; x <= nt; x++) {
+				t = torder[x]
+				set_of(t)
+				line = ""
+				for (j = 1; j <= n; j++) if ((t, j) in S) line = line " " (imap[j] != "" ? imap[j] : iname[j]) " (" irel[j] ")"
+				print t ":" (line == "" ? " nothing" : line)
+			}
+		}
+	}' "$INDEX" "$TAGS"
+}
+
+# Adds <file> <tab> <map> lines as entries, a pack's maps together
+add_units() {
+	awk -F '\t' '
+		$1 != last { if (NR > 1) print last "\t" (whole ? "" : maps); last = $1; maps = ""; whole = 0 }
+		{ if ($2 == "") whole = 1; else maps = maps (maps == "" ? "" : " ") $2 }
+		END { if (NR) print last "\t" (whole ? "" : maps) }' >"$TMP/units"
+	while IFS="$(printf '\t')" read -r f m; do
+		add_pack "$f" "$m"
+	done <"$TMP/units"
+}
+
+# Leaves out <file> <tab> <map> lines: their maps, from any pack, and packs without maps
+exclude_units() {
+	while IFS="$(printf '\t')" read -r f m; do
+		if [ -n "$m" ]; then
+			printf '%s\n' "$m" >>"$TMP/excludes"
+		elif [ -d "$f" ]; then
+			printf '%s\n' "$f" >>"$TMP/xpacks"
+		else
+			printf '%s\n' "$CACHE/packs/${f#"$PACKS"/}" >>"$TMP/xpacks"
+		fi
+	done
+}
+
+# packs tags: every tag and what has it
+if [ "${1:-}" = tags ]; then
+	tags check
+	tags list
+	exit 0
+fi
+
 # One token per line, comments dropped, with tokens like de_* left as they are
 set -f
 sed 's/#.*//' "$LIST" | while IFS= read -r line; do
@@ -575,7 +802,9 @@ set +f
 while IFS= read -r t; do
 	[ -n "$t" ] || continue
 	case $t in
+	-@*) tags query "${t#-@}" | exclude_units ;;
 	-*) printf '%s\n' "${t#-}" >>"$TMP/excludes" ;;
+	@*) tags query "${t#@}" | add_units ;;
 	'*') expand "$PACKS" '*' "" ;;
 	*://*)
 		name=
@@ -597,9 +826,29 @@ while IFS= read -r t; do
 		;;
 	default) entry "$DEFAULT" "" ;;
 	default/*) entry "$DEFAULT" "${t#default/}" ;;
-	*) resolve "$t" ;;
+	*/*) resolve "$t" ;;
+	*)
+		# A group dir by itself is all of it. Otherwise a pack or a map by name, wherever
+		# it is in packs/
+		if [ -d "$PACKS/$t" ] || pack_file "$PACKS/$t" >/dev/null; then
+			resolve "$t"
+		else
+			tags match "$t" >"$TMP/match"
+			if [ -s "$TMP/match" ]; then
+				add_units <"$TMP/match"
+			else
+				if tags list 2>/dev/null | grep -qi "^$t:"; then
+					say "warning: $t: no pack or map by that name in packs/; the tag is @$t"
+				else
+					say "warning: $t: no pack or map by that name in packs/"
+				fi
+			fi
+		fi
+		;;
 	esac
 done <"$TMP/tokens"
+# Typos in the tags file, when a packlist uses it
+grep -q '^-\{0,1\}@' "$TMP/tokens" && tags check
 
 # Downloads nobody lists any more. In a shared library, by every server's list
 manifests=$TMP/keep
@@ -634,6 +883,13 @@ if [ -d "$CACHE/packs" ]; then
 	done
 	find "$CACHE/packs" -mindepth 1 -type d -empty -delete
 fi
+if [ -d "$CACHE/index" ]; then
+	find "$CACHE/index" -type f -name '*.maps' | while IFS= read -r l; do
+		r=${l#"$CACHE"/index/}
+		[ -f "$PACKS/${r%.maps}" ] || rm -f "$l"
+	done
+	find "$CACHE/index" -mindepth 1 -type d -empty -delete
+fi
 
 # Links ---------------------------------------------------------------------------------
 
@@ -663,6 +919,18 @@ while IFS= read -r r; do
 	fi
 done <"$TMP/default"
 [ $moved = 0 ] || say "$moved default map files in cstrike replaced by the default pack"
+
+# Is map $1 in filter $2: patterns, any of them. An empty filter has every map
+in_filter() {
+	[ -n "$2" ] || return 0
+	set -f
+	for _p in $2; do
+		# shellcheck disable=SC2254 # a pattern
+		case $1 in $_p) set +f && return 0 ;; esac
+	done
+	set +f
+	return 1
+}
 
 excluded() {
 	while IFS= read -r g; do
@@ -733,7 +1001,24 @@ while IFS="$(printf '\t')" read -r pack filter; do
 	esac
 	[ -f "$pack/.source" ] && label="$label ($(head -n 1 "$pack/.source"))"
 	linked=0 maps=0 kept=0 out=0 dup=0 plugins=0 copied=0
+	if grep -qxF -e "$pack" "$TMP/xpacks"; then
+		say "$label: left out"
+		continue
+	fi
 	cd "$pack" || continue
+	# A pack with maps, none of them wanted: none of its files either
+	all=0 wanted=0
+	for b in maps/*.bsp; do
+		[ -f "$b" ] || continue
+		b=${b##*/}
+		b=${b%.bsp}
+		all=$((all + 1))
+		if ! excluded "$b" && in_filter "$b" "$filter"; then wanted=$((wanted + 1)); fi
+	done
+	if [ $all -gt 0 ] && [ $wanted = 0 ]; then
+		say "$label: left out, none of its $all maps are wanted"
+		continue
+	fi
 	# <path in cstrike> <tab> <file>. Plugins compiled from source first: they win over a
 	# .amxx the pack has
 	{
@@ -777,7 +1062,7 @@ while IFS="$(printf '\t')" read -r pack filter; do
 		esac
 		if [ -n "$map" ]; then
 			# shellcheck disable=SC2254 # a pattern
-			if excluded "$map" || { [ -n "$filter" ] && case $map in $filter) false ;; *) true ;; esac; }; then
+			if excluded "$map" || ! in_filter "$map" "$filter"; then
 				[ "$r" = "maps/$map.bsp" ] && out=$((out + 1))
 				continue
 			fi
