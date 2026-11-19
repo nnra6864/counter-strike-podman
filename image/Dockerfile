@@ -158,7 +158,11 @@ RUN curl -fsSL https://ziglang.org/download/${ZIG_VER}/zig-x86_64-linux-${ZIG_VE
 COPY tools/goldsrc-demo-tools/ /src/
 RUN [ -f /src/build.zig ] || { \
         echo "image/tools/goldsrc-demo-tools is empty: run git submodule update --init" >&2; exit 1; }
-RUN cd /src && zig build test && zig build -Doptimize=ReleaseSafe --prefix /out && \
+# Zig's cache lives in a build cache mount, kept on the build host between builds and never in
+# the image, so a change to the tool only recompiles what changed. The tests still run every time
+RUN --mount=type=cache,target=/zig-cache \
+    export ZIG_GLOBAL_CACHE_DIR=/zig-cache/global ZIG_LOCAL_CACHE_DIR=/zig-cache/local && \
+    cd /src && zig build test && zig build -Doptimize=ReleaseSafe --prefix /out && \
     /out/bin/goldsrc-demo-tools voice testdata/one-player.dem --dump > /dev/null
 
 
