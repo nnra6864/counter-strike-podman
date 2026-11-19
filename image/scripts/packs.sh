@@ -377,85 +377,10 @@ fetch() {
 	rm -rf "${DOWNLOADS:?}/$name"
 	mv "$tmp/pack" "$DOWNLOADS/$name"
 	rm -rf "$tmp"
-	say "$url: installed as downloads/$name ($(find "$DOWNLOADS/$name/maps" -name '*.bsp' 2>/dev/null | wc -l) maps)"
+	n=$(find "$DOWNLOADS/$name/maps" -name '*.bsp' 2>/dev/null | wc -l)
+	if [ -n "${SAVING:-}" ]; then say "downloaded it ($n maps)"; else say "$url: installed as downloads/$name ($n maps)"; fi
 	echo "$name"
 }
-
-# packs save <download> [dir] -----------------------------------------------------------
-# Copies a download into packs/ (packs/maps or packs/plugins by what's in it, unless a dir
-# is given) as a zip with its URL in the comment, so it stays once the packlist names it
-# there instead of by URL. A zip as it came; a .rar or .7z as a zip of the same files.
-# The download itself isn't changed: GameBanana's checksum is of it as it came
-
-if [ "${1:-}" = save ]; then
-	name=${2:-}
-	d=$DOWNLOADS/$name
-	case $name in '' | */* | .*) d= ;; esac
-	if [ -z "$d" ] || [ ! -f "$d/.source" ]; then
-		say "usage: packs save <download> [dir in packs/]. Downloads: $(ls "$DOWNLOADS" | tr '\n' ' ')"
-		exit 1
-	fi
-	url=$(head -n 1 "$d/.source")
-	group=${3:-}
-	if [ -z "$group" ]; then
-		if [ -d "$d/maps" ]; then group=maps; elif [ -d "$d/addons/amxmodx" ]; then group=plugins; fi
-	fi
-	group=${group%/}
-	case /$group/ in */../* | */./* | //*) say "$group: not a dir in packs/" && exit 1 ;; esac
-	dir=$PACKS${group:+/$group}
-	mkdir -p "$dir"
-	orig=$(ls "$d/.original" 2>/dev/null | head -n 1)
-	tmp=$dir/.tmp.$$.zip
-	trap 'rm -rf "$TMP" "$tmp"' EXIT
-	if [ -n "$orig" ]; then
-		src=$d/.original/$orig
-		md5=$(sed -n 's/^md5 //p' "$d/.source")
-		if [ -n "$md5" ] && [ "$(md5sum <"$src" | cut -d ' ' -f 1)" != "$md5" ]; then
-			say "$name: downloads/$name/.original/$orig doesn't match GameBanana's checksum any more"
-			exit 1
-		fi
-		# A zip as it is. Anything else into a zip, its files as they are: only a zip can
-		# have the URL in it
-		case $(head -c 4 "$src" | od -An -t x1 | tr -d ' \n') in
-		504b0304) cp "$src" "$tmp" ;;
-		52617221 | 377abcaf)
-			LC_ALL=C.UTF-8 bsdtar --format zip -cf "$tmp" "@$src" || exit 1
-			say "$name: $orig is a ${orig##*.}: saving its files as a zip"
-			;;
-		*)
-			# A lone .bsp, .sma or .amxx, where the game would have it
-			case $(lower "$orig") in
-			*.bsp) r=maps ;;
-			*.sma) r=addons/amxmodx/scripting ;;
-			*.amxx) r=addons/amxmodx/plugins ;;
-			*) r=. ;;
-			esac
-			mkdir -p "$TMP/lone/$r" && cp "$src" "$TMP/lone/$r/"
-			(cd "$TMP/lone" && LC_ALL=C.UTF-8 bsdtar --format zip -cf "$tmp" -- *) || exit 1
-			;;
-		esac
-	else
-		# Downloaded before packs kept the file: a zip of what was unpacked
-		(cd "$d" && LC_ALL=C.UTF-8 bsdtar --format zip -cf "$tmp" -- *) || exit 1
-		say "$name: the file as it was downloaded isn't kept, saving a zip of its contents"
-	fi
-	dest=$dir/$name.zip
-	rel=${dest#"$PACKS"/}
-	if [ -e "$dest" ]; then
-		say "packs/$rel is already there"
-		exit 1
-	fi
-	if [ -n "$(unzip -qz "$tmp" 2>/dev/null)" ]; then
-		say "it has a comment already, left as it is: $(unzip -qz "$tmp" | head -n 1)"
-	else
-		printf '%s\n' "$url" | zip -zq "$tmp"
-	fi
-	chmod a+r "$tmp"
-	mv "$tmp" "$dest"
-	say "saved packs/$rel ($url)"
-	say "in data/packlist, replace $url with $name"
-	exit 0
-fi
 
 # The list ------------------------------------------------------------------------------
 
@@ -791,6 +716,132 @@ exclude_units() {
 		fi
 	done
 }
+
+# cs save <URL or download> [dir] ----------------------------------------------------
+# Keeps a map or plugin in packs/ (packs/maps or packs/plugins by what's in it, unless a dir
+# is given) as a zip with its URL in the comment. A URL is downloaded for it, unless a
+# packlist has downloaded it already; a download a packlist has can then be named there
+# by name instead of by URL. A zip as it came; a .rar or .7z as a zip of the same files.
+# Downloads themselves aren't changed: GameBanana's checksum is of them as they came
+
+if [ "${1:-}" = save ]; then
+	arg=${2:-}
+	if [ -z "$arg" ]; then
+		say "usage: cs save <URL or download> [dir in packs/]"
+		have=
+		for s in "$DOWNLOADS"/*/.source; do
+			[ -f "$s" ] || continue
+			[ -n "$have" ] || say "downloads from packlists, which can be saved by name:"
+			have=1
+			d=${s%/.source}
+			say "  ${d##*/}  $(head -n 1 "$s")"
+		done
+		[ -n "$have" ] || say "no downloads from packlists; give a URL"
+		exit 1
+	fi
+	url='' name='' fetched=''
+	case $arg in
+	*://*)
+		url=$arg
+		for s in "$DOWNLOADS"/*/.source; do
+			[ -f "$s" ] && [ "$(head -n 1 "$s")" = "$url" ] || continue
+			d=${s%/.source}
+			name=${d##*/}
+			break
+		done
+		;;
+	*)
+		name=$arg
+		case $name in */* | .*) name= ;; esac
+		if [ -z "$name" ] || [ ! -f "$DOWNLOADS/$name/.source" ]; then
+			say "$arg: no such download. cs save with nothing after it lists them, or give a URL"
+			exit 1
+		fi
+		url=$(head -n 1 "$DOWNLOADS/$name/.source")
+		;;
+	esac
+	# Saved before: a pack with this URL in it
+	index
+	awk -F '\t' '!seen[$4]++ { print $4 }' "$INDEX" | while IFS= read -r f; do
+		[ -f "$f" ] && [ "$(origin "$f")" = "$url" ] && printf '%s\n' "$f"
+	done | head -n 1 >"$TMP/have"
+	if [ -s "$TMP/have" ]; then
+		f=$(cat "$TMP/have")
+		say "already saved: packs/${f#"$PACKS"/} is $url"
+		exit 0
+	fi
+	if [ -z "$name" ]; then
+		name=$(SAVING=1 fetch "$url" "") || exit 1
+		fetched=1
+	fi
+	d=$DOWNLOADS/$name
+	group=${3:-}
+	if [ -z "$group" ]; then
+		if [ -d "$d/maps" ]; then group=maps; elif [ -d "$d/addons/amxmodx" ]; then group=plugins; fi
+	fi
+	group=${group%/}
+	case /$group/ in */../* | */./* | //*) say "$group: not a dir in packs/" && exit 1 ;; esac
+	dir=$PACKS${group:+/$group}
+	mkdir -p "$dir"
+	orig=$(ls "$d/.original" 2>/dev/null | head -n 1)
+	tmp=$dir/.tmp.$$.zip
+	# A download made only for this goes once it's saved, or if saving fails
+	trap 'rm -rf "$TMP" "$tmp"; [ -n "$fetched" ] && rm -rf "$d"' EXIT
+	if [ -n "$orig" ]; then
+		src=$d/.original/$orig
+		md5=$(sed -n 's/^md5 //p' "$d/.source")
+		if [ -n "$md5" ] && [ "$(md5sum <"$src" | cut -d ' ' -f 1)" != "$md5" ]; then
+			say "$name: downloads/$name/.original/$orig doesn't match GameBanana's checksum any more"
+			exit 1
+		fi
+		# A zip as it is. Anything else into a zip, its files as they are: only a zip can
+		# have the URL in it
+		case $(head -c 4 "$src" | od -An -t x1 | tr -d ' \n') in
+		504b0304) cp "$src" "$tmp" ;;
+		52617221 | 377abcaf)
+			LC_ALL=C.UTF-8 bsdtar --format zip -cf "$tmp" "@$src" || exit 1
+			say "$name: $orig is a ${orig##*.}: saving its files as a zip"
+			;;
+		*)
+			# A lone .bsp, .sma or .amxx, where the game would have it
+			case $(lower "$orig") in
+			*.bsp) r=maps ;;
+			*.sma) r=addons/amxmodx/scripting ;;
+			*.amxx) r=addons/amxmodx/plugins ;;
+			*) r=. ;;
+			esac
+			mkdir -p "$TMP/lone/$r" && cp "$src" "$TMP/lone/$r/"
+			(cd "$TMP/lone" && LC_ALL=C.UTF-8 bsdtar --format zip -cf "$tmp" -- *) || exit 1
+			;;
+		esac
+	else
+		# Downloaded before packs kept the file: a zip of what was unpacked
+		(cd "$d" && LC_ALL=C.UTF-8 bsdtar --format zip -cf "$tmp" -- *) || exit 1
+		say "$name: the file as it was downloaded isn't kept, saving a zip of its contents"
+	fi
+	dest=$dir/$name.zip
+	rel=${dest#"$PACKS"/}
+	if [ -e "$dest" ]; then
+		o=$(origin "$dest")
+		say "not saved: packs/$rel is already there${o:+, from $o}. Give another dir: cs save $arg <dir>"
+		exit 1
+	fi
+	if [ -n "$(unzip -qz "$tmp" 2>/dev/null)" ]; then
+		say "it has a comment already, left as it is: $(unzip -qz "$tmp" | head -n 1)"
+	else
+		printf '%s\n' "$url" | zip -zq "$tmp"
+	fi
+	chmod a+r "$tmp"
+	mv "$tmp" "$dest"
+	say "saved $url"
+	say "  as packs/$rel, with the URL in the zip's comment"
+	if [ -n "$fetched" ]; then
+		say "  use it by name in a packlist or the tags file: $name"
+	else
+		say "  in data/packlist, replace the URL with $name: the download goes on the next cs reload"
+	fi
+	exit 0
+fi
 
 # packs tags: every tag and what has it
 if [ "${1:-}" = tags ]; then

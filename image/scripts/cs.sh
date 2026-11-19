@@ -8,14 +8,15 @@
 #                        the next map change; --now restarts the current map for that
 #   tags                 every tag in the tags file and what has it, and names that match
 #                        nothing
-#   save <download> [dir]  keep a download in packs/ (packs/maps, packs/plugins, or dir),
-#                        its URL in the zip's comment
+#   save <URL> [dir]     download a map or plugin into packs/ (packs/maps, packs/plugins,
+#                        or dir), its URL in the zip's comment. Alone: the packlists'
+#                        downloads, which can be saved by name
 #   console <command>    send a command to the server's console; its output is in the
 #                        container's logs (podman logs <container>)
 
 FIFO=/tmp/server.in
 
-usage() { sed -n '2,16s/^# \{0,1\}//p' "$0" >&2; }
+usage() { sed -n '2,17s/^# \{0,1\}//p' "$0" >&2; }
 
 console() {
 	if [ ! -p "$FIFO" ]; then

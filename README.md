@@ -273,14 +273,24 @@ A URL in a zip's comment (`zip -z`) is where it came from; for other files, a `.
 [packs] packs/maps/fy_snow.zip (https://gamebanana.com/mods/86704): 1 maps, 9 files
 ```
 
-To keep a download in `packs/` with its URL:
+To download a map or plugin into `packs/` with its URL:
 
 ```sh
-podman exec counter-strike cs save fy_snow          # into packs/maps/ (or packs/plugins/)
-podman exec counter-strike cs save fy_snow xmas     # into packs/xmas/
+podman exec counter-strike cs save https://gamebanana.com/mods/84229        # into packs/maps/ (or packs/plugins/)
+podman exec counter-strike cs save https://gamebanana.com/mods/84229 winter # into packs/winter/
 ```
 
-It checks the file as it was downloaded against GameBanana's checksum again, copies it into `packs/` as a zip and puts the URL in its comment. Then replace the URL in the packlist with the name (`fy_snow`), and the download goes away once no packlist has it.
+```
+[packs] downloading https://gamebanana.com/mods/84229
+[packs] downloaded it (1 maps)
+[packs] de_inferno_snow: cstrike_inferno.rar is a rar: saving its files as a zip
+[packs] saved https://gamebanana.com/mods/84229
+[packs]   as packs/maps/de_inferno_snow.zip, with the URL in the zip's comment
+[packs]   use it by name in a packlist or the tags file: de_inferno_snow
+```
+
+It checks the file against GameBanana's checksum, puts it in `packs/` as a zip and the URL in its comment. A URL that's in `packs/` already is said so and left alone.
+A URL a packlist has downloaded already isn't downloaded again: `cs save` saves that download (by URL or by its name; `cs save` alone lists them), and then the URL in the packlist can be replaced with the name. The download goes on the next `cs reload`.
 A `.rar` or `.7z` becomes a zip of the same files (only a zip can hold the URL), a lone `.bsp`, `.sma` or `.amxx` a zip with it where the game looks for it. Downloads from before `.original/` was kept are saved as a zip of what was unpacked.
 The download itself is never changed. A zip's comment is outside the files in it, so the maps in it are the same bytes, but the zip's own checksum isn't GameBanana's any more.
 
@@ -450,7 +460,7 @@ podman exec counter-strike cs <command>
 | `reload` | link the packs again after editing `data/packlist` or the tags file: maps, plugins, FastDL, the map cycle. New plugins load with the next map, see [Packs](#packs) |
 | `reload --now` | the same, then restart the current map so they load now (players reconnect) |
 | `tags` | every tag and what has it, and names in the tags file that match nothing, see [Tags](#tags) |
-| `save <download> [dir]` | keep a download in `packs/` as a zip with its URL, see [Where a pack came from](#where-a-pack-came-from) |
+| `save <URL> [dir]` | download a map or plugin into `packs/`, as a zip with its URL, see [Where a pack came from](#where-a-pack-came-from). `save` alone lists the packlists' downloads, which can be saved by name |
 | `console <command>` | send a command to the server's console, like `cs console changelevel de_dust2`; the output is in the container's logs |
 | `help` | this list |
 
