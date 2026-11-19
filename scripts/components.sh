@@ -9,7 +9,7 @@
 #   ENABLE_HLTV_VOICE=$ENABLE_HLTV   let HLTV hear everyone, so demos have voice
 #                         (needs ReGameDLL and AMX Mod X)
 #   ENABLE_VOICE_MKA=$ENABLE_HLTV    a .mka with a track per player next to each
-#                         finished demo (see voice.sh, VOICE_MKA_ARGS)
+#                         finished demo (see demos.sh, VOICE_MKA_ARGS)
 #
 # Binaries are refreshed from the image on every start, so rebuilding the image
 # upgrades them. Configs and plugins in the volume are left alone.
@@ -125,5 +125,6 @@ elif on "$ENABLE_HLTV"; then
 fi
 if on "$ENABLE_HLTV"; then
 	[ $voice = 1 ] && say "HLTV: on, with voice" || say "HLTV: on"
+	say "recording: ${RECORD_IDLE_STOP:-120}s idle stop (0 = always), empty demos deleted: ${DELETE_EMPTY_DEMOS:-1}"
 	on "$ENABLE_VOICE_MKA" && say "voice .mka per demo: on${VOICE_MKA_ARGS:+ ($VOICE_MKA_ARGS)}"
 fi

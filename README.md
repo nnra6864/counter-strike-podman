@@ -94,8 +94,8 @@ They all use port 27015 unless you change `ports` in `compose.yaml`, so only one
 | `compose.yaml` | the container: ports, volumes, restart policy |
 | `compose.override.yaml` | yours, gitignored: what this server changes |
 | `presets/` | settings as env files: `defaults.env` for every server, `competitive.env` on top for 5v5 |
-| `Dockerfile` | builds the image: ReHLDS, ReGameDLL, Metamod-R, AMX Mod X, ReAPI, the plugins, goldsrc-hltv-voice |
-| `scripts/` | run inside the container on every start: `entrypoint.sh` runs `components.sh` (which components load), `env-config.sh` (applies the environment variables to the configs), and `hltv.sh` (HLTV, which starts `voice.sh` for the `.mka`s) |
+| `Dockerfile` | builds the image: ReHLDS, ReGameDLL, Metamod-R, AMX Mod X, ReAPI, the plugins, goldsrc-demo-tools |
+| `scripts/` | run inside the container on every start: `entrypoint.sh` runs `components.sh` (which components load), `env-config.sh` (applies the environment variables to the configs), and `hltv.sh` (HLTV, recording while players are on; it starts `demos.sh`, which repairs, deletes or writes a `.mka` for each finished demo) |
 | `plugins/` | our AMX Mod X plugins, compiled into the image |
 | `cstrike/` | the server's files and configs, created on first start, gitignored |
 
@@ -120,14 +120,14 @@ Everything ships in the image, and `ENABLE_*` decides what the server loads:
 | `ENABLE_METAMOD` | `1` | Metamod-R |
 | `ENABLE_AMXMODX` | `1` | AMX Mod X + ReAPI, needs metamod |
 | `ENABLE_HLTV` | `0` | HLTV proxy for recording demos, see [Replays](#replays) |
-| `ENABLE_HLTV_VOICE` | `ENABLE_HLTV` | lets HLTV hear every player, so demos have voice. Needs ReGameDLL and AMX Mod X |
+| `ENABLE_HLTV_VOICE` | `ENABLE_HLTV` | lets HLTV hear every player, so demos have voice (the `hltv_tools` plugin). Needs ReGameDLL and AMX Mod X |
 
 Set them all to `0` for a plain ReHLDS server.
 The binaries (game dll, metamod, AMXX dlls and modules) are refreshed from the image on every start, so rebuilding the image upgrades them. Configs and plugins in `cstrike` are never overwritten.
 
 ### Replays
 
-With `ENABLE_HLTV: "1"`, an HLTV proxy runs next to the server and records every map to `cstrike/demos/hltv-<date>-<map>.dem`.
+With `ENABLE_HLTV: "1"`, an HLTV proxy runs next to the server and records to `cstrike/demos/hltv-<date>-<map>.dem`, a file per map, while someone is on: recording starts when a player connects and stops once nobody has been on for `RECORD_IDLE_STOP` seconds.
 Watch one by copying it to your game's `cstrike` dir and running `viewdemo hltv-....dem` in the console.
 
 HLTV takes a player slot, so raise `MAXPLAYERS` by one.
@@ -136,6 +136,7 @@ It doesn't accept spectators by default (`HLTV_MAXCLIENTS: "0"`): with voice on,
 | Variable | Default | |
 |---|---|---|
 | `HLTV_RECORD` | `demos/hltv` | demo name, relative to `cstrike`. Empty = don't record |
+| `RECORD_IDLE_STOP` | `120` | seconds with nobody on before recording stops. `0` = record all the time. Needs AMX Mod X (the `hltv_tools` plugin counts the players); without it HLTV records all the time |
 | `HLTV_SERVER` | `127.0.0.1:27015` | server to connect to |
 | `HLTV_PORT` | `27020` | HLTV's own port. Not published, add it to `ports` for live spectators |
 | `HLTV_<CMD>` | | any HLTV command, run as `+<cmd> value`: `HLTV_DELAY`, `HLTV_MAXCLIENTS`, `HLTV_NAME`, `HLTV_HOSTNAME`, ... |
@@ -157,21 +158,29 @@ services:
       - /path/to/replays:/opt/hlds/cstrike/demos
 ```
 
-#### Voice tracks
+#### Finished demos
 
-With HLTV on, each finished demo also gets a `.mka` next to it, with the voice chat as one Opus track per player, in sync with the demo from the start ([goldsrc-hltv-voice](https://git.nnstdios.com/nnra6864/goldsrc-hltv-voice), built into the image).
-A demo is finished when HLTV moves on to the next map, or when the container starts again after a stop or crash. Demos with no voice get no `.mka`.
+Every finished demo is handled once, in the background:
+
+- **Repaired** if it was never finished (server crash, HLTV killed), so the game can still play it. On `podman stop`, HLTV finishes its demo first, so that's only needed after a crash.
+- **Deleted** if nobody joined (`DELETE_EMPTY_DEMOS`). HLTV and bots don't count; anyone who connected does.
+- Otherwise it gets a **`.mka`** next to it, with the voice chat as one Opus track per player, in sync with the demo from the start. Demos with no voice get no `.mka`.
+
+This uses [goldsrc-demo-tools](https://git.nnstdios.com/nnra6864/goldsrc-demo-tools), built into the image.
 
 | Variable | Default | |
 |---|---|---|
+| `DELETE_EMPTY_DEMOS` | `1` | delete demos nobody joined |
 | `ENABLE_VOICE_MKA` | `ENABLE_HLTV` | a `.mka` per finished demo |
 | `VOICE_MKA_ARGS` | | options: `--order team` (tracks T first, then CT; good for competitive), `--tracks team` or `--tracks mix` (a track per team, or one), `--lenient` (write even if parts of the demo couldn't be read) |
 
-Its output is in the container logs, prefixed with `[voice]`. To run it by hand, on any demo:
+The log lines are prefixed with `[demos]`. Handled demos are listed in `cstrike/hltv_demos_done.txt`, so each is handled once. On its first start, a server handles every demo in its demo dir that isn't listed there yet.
+To run the tool by hand, on any demo:
 
 ```sh
-podman exec counter-strike goldsrc-hltv-voice cstrike/demos/hltv-....dem --order team
-podman exec counter-strike goldsrc-hltv-voice cstrike/demos/hltv-....dem --dump   # who spoke, raw packets
+podman exec counter-strike goldsrc-demo-tools voice cstrike/demos/hltv-....dem --order team
+podman exec counter-strike goldsrc-demo-tools info cstrike/demos/hltv-....dem    # who joined
+podman exec counter-strike goldsrc-demo-tools repair cstrike/demos/hltv-....dem  # finish a cut-off demo
 ```
 
 ### Environment variables

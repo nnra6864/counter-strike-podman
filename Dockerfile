@@ -118,14 +118,15 @@ EOF
 RUN mv cstrike cstrike_defaults && mkdir cstrike
 
 
-# Stage 2: goldsrc-hltv-voice, turns each demo's voice chat into a .mka (see scripts/voice.sh)
-FROM debian:bookworm-slim AS voice
+# Stage 2: goldsrc-demo-tools: repairs demos, tells who joined, writes their voice to a .mka
+# (see scripts/hltv.sh and scripts/demos.sh)
+FROM debian:bookworm-slim AS demo-tools
 
 ARG ZIG_VER=0.17.1
 ARG OPUS_VER=1.6.1
 ARG OPUS_SHA256=6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1
-ARG HLTV_VOICE_REPO=https://git.nnstdios.com/nnra6864/goldsrc-hltv-voice.git
-ARG HLTV_VOICE_REF=5ff59d32ef81af62fed119eea62723df7d863930
+ARG DEMO_TOOLS_REPO=https://git.nnstdios.com/nnra6864/goldsrc-demo-tools.git
+ARG DEMO_TOOLS_REF=3708fcfce23c45357a0cec2a93c0a98daf86fb27
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates curl xz-utils git gcc make libc6-dev pkgconf && \
@@ -141,10 +142,10 @@ RUN curl -fsSL -o /tmp/opus.tar.gz https://downloads.xiph.org/releases/opus/opus
 RUN curl -fsSL https://ziglang.org/download/${ZIG_VER}/zig-x86_64-linux-${ZIG_VER}.tar.xz | tar -xJ -C /opt && \
     ln -s /opt/zig-x86_64-linux-${ZIG_VER}/zig /usr/local/bin/zig
 # The tests check voice placement against the reference fixtures, with this libopus
-RUN git clone -q "$HLTV_VOICE_REPO" /src && \
-    git -C /src checkout -q "$HLTV_VOICE_REF" && \
+RUN git clone -q "$DEMO_TOOLS_REPO" /src && \
+    git -C /src checkout -q "$DEMO_TOOLS_REF" && \
     cd /src && zig build test && zig build -Doptimize=ReleaseSafe --prefix /out && \
-    /out/bin/goldsrc-hltv-voice --dump testdata/one-player.dem > /dev/null
+    /out/bin/goldsrc-demo-tools voice testdata/one-player.dem --dump > /dev/null
 
 
 # Stage 3: minimal runtime
@@ -163,7 +164,7 @@ WORKDIR /opt/hlds
 COPY --from=fetch --chown=0:0 /opt/hlds /opt/hlds
 # HLDS looks for steamclient.so in ~/.steam/sdk32
 COPY --from=fetch --chown=0:0 /home/steam/.steam /root/.steam
-COPY --from=voice /out/bin/goldsrc-hltv-voice /usr/local/bin/
+COPY --from=demo-tools /out/bin/goldsrc-demo-tools /usr/local/bin/
 
 EXPOSE 27015/udp 27015/tcp
 ENTRYPOINT ["/opt/hlds/entrypoint.sh"]

@@ -28,7 +28,7 @@ From the source: ReHLTV writes every `svc_voicedata` it gets into the demo (`Dem
 - [x] `ENABLE_HLTV_VOICE` (1 when HLTV is on): toggles the plugin through `AMXX_PLUGIN_HLTV_VOICE`
 - [x] Test (2026-11-18: one player on CT, voice recorded and decoded; still to check with two players on different teams that each hears only their team): record with two clients talking, check the demo for `svc_voicedata` (and that playback in the game client has voice)
 
-## 4. Per-player audio tracks (goldsrc-hltv-voice)
+## 4. Per-player audio tracks (goldsrc-demo-tools, was goldsrc-hltv-voice)
 
 `goldsrc-hltv-voice <demo.dem> [-o out.mka] [--tracks player|team|mix] [--order join|team] [--dump] [--lenient]`. Prototyped in Rust as `tools/demo-voice` (removed 2026-11-18, see git history)
 
@@ -48,3 +48,4 @@ From the source: ReHLTV writes every `svc_voicedata` it gets into the demo (`Dem
 - [x] Competitive as a preset instead of a `competitive` branch; every server runs master (2026-11-18). Presets are env files (`presets/defaults.env`, `presets/competitive.env`) listed in `compose.override.yaml`, which goes on top: podman-compose 1.6 `include:` merges the included file last (the preset would win) and `extends:` puts the preset under `compose.yaml` (the defaults would win). `MAXPLAYERS` replaces `+maxplayers` so a preset can set it
 - [x] Container scripts in `scripts/` (2026-11-18)
 - [x] `hltv_voice` became `hltv_tools`: also writes the player count (bots, HLTV not counted) for recording only while someone is on. An old `hltv_voice` line in `plugins.ini` is turned off (2026-11-19)
+- [x] Record only while players are on (`RECORD_IDLE_STOP`), repair demos a crash left unfinished, delete demos nobody joined (`DELETE_EMPTY_DEMOS`), `.mka` for the rest: `hltv.sh`, `demos.sh` (was `voice.sh`), goldsrc-demo-tools (2026-11-19)
