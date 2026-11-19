@@ -4,9 +4,9 @@
 # on every start, and by hand after editing the list, while the server runs (new maps and
 # plugins work from the next map change):
 #
-#   podman exec <container> packs
-#   podman exec <container> packs save <download> [dir]   keep a download in packs/
-#   podman exec <container> packs tags                    every tag and what has it
+#   podman exec <container> cs reload   (packs is the same)
+#   podman exec <container> cs save <download> [dir]      keep a download in packs/
+#   podman exec <container> cs tags                       every tag and what has it
 #
 # data/packlist says which packs, in order; the first one wins a file two packs have. One
 # per line, # for comments:
@@ -114,7 +114,7 @@ rm -rf "$DOWNLOADS"/.tmp.* "$CACHE"/.tmp.*
 if [ ! -f "$LIST" ]; then
 	cat >"$LIST" <<-'EOF'
 	# The packs this server uses, in order: the first one wins a file two packs have.
-	# After editing: podman exec <container> packs   (new maps work from the next map change)
+	# After editing: podman exec <container> cs reload   (new maps work from the next map change)
 	#
 	#   default        the maps CS ships with
 	#   mypack         packs/mypack: a dir, or mypack.zip/.rar/.7z/.bsp/.sma/.amxx
@@ -130,7 +130,7 @@ if [ ! -f "$LIST" ]; then
 	#   name=https://...   the same, as downloads/name
 	#
 	# Keep a download in packs/, its URL in the zip's comment:
-	#   podman exec <container> packs save <download> [dir]
+	#   podman exec <container> cs save <download> [dir]
 	default
 	*
 	EOF
@@ -383,9 +383,9 @@ fetch() {
 
 # packs save <download> [dir] -----------------------------------------------------------
 # Copies a download into packs/ (packs/maps or packs/plugins by what's in it, unless a dir
-# is given) as the file it was, its URL in the zip's comment (a .url file next to anything
-# else), so it stays once the packlist names it there instead of by URL. The download
-# itself isn't changed: GameBanana's checksum is of it as it came
+# is given) as a zip with its URL in the comment, so it stays once the packlist names it
+# there instead of by URL. A zip as it came; a .rar or .7z as a zip of the same files.
+# The download itself isn't changed: GameBanana's checksum is of it as it came
 
 if [ "${1:-}" = save ]; then
 	name=${2:-}
@@ -414,38 +414,46 @@ if [ "${1:-}" = save ]; then
 			say "$name: downloads/$name/.original/$orig doesn't match GameBanana's checksum any more"
 			exit 1
 		fi
+		# A zip as it is. Anything else into a zip, its files as they are: only a zip can
+		# have the URL in it
 		case $(head -c 4 "$src" | od -An -t x1 | tr -d ' \n') in
-		504b0304) ext=zip ;;
-		52617221) ext=rar ;;
-		377abcaf) ext=7z ;;
-		*) ext=$(lower "${orig##*.}") ;;
+		504b0304) cp "$src" "$tmp" ;;
+		52617221 | 377abcaf)
+			LC_ALL=C.UTF-8 bsdtar --format zip -cf "$tmp" "@$src" || exit 1
+			say "$name: $orig is a ${orig##*.}: saving its files as a zip"
+			;;
+		*)
+			# A lone .bsp, .sma or .amxx, where the game would have it
+			case $(lower "$orig") in
+			*.bsp) r=maps ;;
+			*.sma) r=addons/amxmodx/scripting ;;
+			*.amxx) r=addons/amxmodx/plugins ;;
+			*) r=. ;;
+			esac
+			mkdir -p "$TMP/lone/$r" && cp "$src" "$TMP/lone/$r/"
+			(cd "$TMP/lone" && LC_ALL=C.UTF-8 bsdtar --format zip -cf "$tmp" -- *) || exit 1
+			;;
 		esac
-		cp "$src" "$tmp"
 	else
 		# Downloaded before packs kept the file: a zip of what was unpacked
-		ext=zip
-		(cd "$d" && bsdtar --format zip -cf "$tmp" -- *) || exit 1
+		(cd "$d" && LC_ALL=C.UTF-8 bsdtar --format zip -cf "$tmp" -- *) || exit 1
 		say "$name: the file as it was downloaded isn't kept, saving a zip of its contents"
 	fi
-	dest=$dir/$name.$ext
+	dest=$dir/$name.zip
 	rel=${dest#"$PACKS"/}
 	if [ -e "$dest" ]; then
 		say "packs/$rel is already there"
 		exit 1
 	fi
-	if [ "$ext" = zip ]; then
-		if [ -n "$(unzip -qz "$tmp" 2>/dev/null)" ]; then
-			say "it has a comment already, left as it is: $(unzip -qz "$tmp" | head -n 1)"
-		else
-			printf '%s\n' "$url" | zip -zq "$tmp"
-		fi
+	if [ -n "$(unzip -qz "$tmp" 2>/dev/null)" ]; then
+		say "it has a comment already, left as it is: $(unzip -qz "$tmp" | head -n 1)"
 	else
-		printf '%s\n' "$url" >"${dest%.*}.url"
+		printf '%s\n' "$url" | zip -zq "$tmp"
 	fi
 	chmod a+r "$tmp"
 	mv "$tmp" "$dest"
 	say "saved packs/$rel ($url)"
-	say "in data/packlist, replace $url with ${rel%.*}"
+	say "in data/packlist, replace $url with $name"
 	exit 0
 fi
 
@@ -649,7 +657,7 @@ if [ ! -f "$TAGS" ]; then
 	#   [tag.competitive] @competitive_maps knife_round   @tag: all of another tag
 	#
 	# A name is a pack (its file or dir name, wherever it is in packs/), a map in one, or a
-	# pack's path (maps/fy_snow). After editing: podman exec <container> packs tags
+	# pack's path (maps/fy_snow). After editing: podman exec <container> cs tags
 	EOF
 fi
 

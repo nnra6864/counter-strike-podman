@@ -104,7 +104,7 @@ They all use port 27015 unless you change `ports` in `compose.yaml`, so only one
 | `presets/` | settings as env files: `defaults.env` for every server, `competitive.env` on top for 5v5 |
 | `image/` | what the image is built from; nothing in it needs editing to run a server |
 | `image/Dockerfile` | builds the image: ReHLDS, ReGameDLL, Metamod-R, AMX Mod X, ReAPI, the plugins, goldsrc-demo-tools |
-| `image/scripts/` | run inside the container on every start: `entrypoint.sh` runs `components.sh` (which components load), `packs.sh` (links the packs in, maps and plugins, also the `packs` command, see [Packs](#packs)), `env-config.sh` (applies the environment variables to the configs), and `hltv.sh` (HLTV, recording while players are on; it starts `demos.sh`, which repairs, deletes or writes a `.mka` for each finished demo) |
+| `image/scripts/` | run inside the container on every start: `entrypoint.sh` runs `components.sh` (which components load), `packs.sh` (links the packs in, maps and plugins, see [Packs](#packs)); `cs.sh` is the `cs` command, see [Commands](#commands), `env-config.sh` (applies the environment variables to the configs), and `hltv.sh` (HLTV, recording while players are on; it starts `demos.sh`, which repairs, deletes or writes a `.mka` for each finished demo) |
 | `image/plugins/` | our AMX Mod X plugins, compiled into the image: [hltv-tools](https://github.com/nnra6864/hltv-tools) (a git submodule) |
 | `image/tools/` | [goldsrc-demo-tools](https://github.com/nnra6864/goldsrc-demo-tools) (a git submodule), built into the image |
 | `cstrike/` | the server's files and configs, created on first start, gitignored |
@@ -205,10 +205,11 @@ Packs and maps left out (`-cs_*`, `-@xmas`) are left out wherever the packlist n
 After editing it, while the server runs:
 
 ```sh
-podman exec counter-strike packs
+podman exec counter-strike cs reload         # from the next map change
+podman exec counter-strike cs reload --now   # restarts the current map for it
 ```
 
-New maps and plugins work from the next map change; the container also does this on every start.
+New maps can be changed to right away; new plugins load with the next map, which `--now` starts (players reconnect). The container also does this on every start. `packs` is the older name for `cs reload`.
 Each URL is downloaded once, and laid out like `cstrike` whatever the archive looks like (loose `.bsp`s go in `maps/`, skies in `gfx/env/`, `.sma`s in `addons/amxmodx/scripting/`). Its source is in `downloads/<name>/.source`, and the file as it came in `downloads/<name>/.original/`.
 
 The map cycle is every map from the packs, in packlist order (`cstrike/packs_mapcycle.txt`); within a pack, its `mapcycle.txt` first (`default` has the stock one), then the rest by name. `MAPCYCLE: "0"` keeps `mapcycle.txt`.
@@ -245,11 +246,11 @@ knife_round
 - A name is a pack (its file or dir name, wherever it is in `packs/`), a map in one, or a pack's path (`maps/fy_snow`). Patterns work.
 - `@tag` in a tag is everything with that other tag.
 
-In the packlist, `@snow` is everything tagged snow, `@snow+competitive` everything with both, `-@xmas` leaves them out. Tags name what's in `packs/`; for a download, `packs save` it first.
+In the packlist, `@snow` is everything tagged snow, `@snow+competitive` everything with both, `-@xmas` leaves them out. Tags name what's in `packs/`; for a download, `cs save` it first.
 The first start writes a `tags` file with only comments. To see every tag and what has it, and warnings for names that match nothing:
 
 ```sh
-podman exec counter-strike packs tags
+podman exec counter-strike cs tags
 ```
 
 #### Plugins
@@ -266,7 +267,7 @@ Archives from AlliedModders are put into shape like maps: `addons/amxmodx/...`, 
 
 #### Where a pack came from
 
-A URL in a zip's comment (`zip -z`) is where it came from; for other files, a `.url` file next to them with the URL in it (`fy_snow.url` for `fy_snow.rar`). `packs` shows it in the log:
+A URL in a zip's comment (`zip -z`) is where it came from; for other files, a `.url` file next to them with the URL in it (`fy_snow.url` for `fy_snow.rar`). `cs reload` shows it in the log:
 
 ```
 [packs] packs/maps/fy_snow.zip (https://gamebanana.com/mods/86704): 1 maps, 9 files
@@ -275,13 +276,13 @@ A URL in a zip's comment (`zip -z`) is where it came from; for other files, a `.
 To keep a download in `packs/` with its URL:
 
 ```sh
-podman exec counter-strike packs save fy_snow          # into packs/maps/ (or packs/plugins/)
-podman exec counter-strike packs save fy_snow xmas     # into packs/xmas/
+podman exec counter-strike cs save fy_snow          # into packs/maps/ (or packs/plugins/)
+podman exec counter-strike cs save fy_snow xmas     # into packs/xmas/
 ```
 
-It copies the file as it was downloaded, after checking it against GameBanana's checksum again, and puts the URL in its comment. Then replace the URL in the packlist with the name it prints (`maps/fy_snow`), and the download goes away once no packlist has it.
-The download itself is never changed. A zip's comment is outside the files in it, so the maps in it are the same bytes, but the zip's own checksum isn't GameBanana's any more. `.rar` and `.7z` files are copied as they are, with a `.url` file.
-Downloads from before `.original/` was kept are saved as a zip of what was unpacked.
+It checks the file as it was downloaded against GameBanana's checksum again, copies it into `packs/` as a zip and puts the URL in its comment. Then replace the URL in the packlist with the name (`fy_snow`), and the download goes away once no packlist has it.
+A `.rar` or `.7z` becomes a zip of the same files (only a zip can hold the URL), a lone `.bsp`, `.sma` or `.amxx` a zip with it where the game looks for it. Downloads from before `.original/` was kept are saved as a zip of what was unpacked.
+The download itself is never changed. A zip's comment is outside the files in it, so the maps in it are the same bytes, but the zip's own checksum isn't GameBanana's any more.
 
 #### Sharing packs between servers
 
@@ -316,7 +317,7 @@ server {
 ```
 
 Use plain `http://` for `FASTDL_URL`, with no redirect to HTTPS on that host: it isn't known whether the game client can download over HTTPS.
-The web server has to be able to read the files, which `packs` makes world-readable. `FASTDL_URL` can be 127 characters at most.
+The web server has to be able to read the files, which `cs reload` makes world-readable. `FASTDL_URL` can be 127 characters at most.
 
 ### Replays
 
@@ -433,6 +434,27 @@ podman attach counter-strike
 
 > [!NOTE]
 > To detach from the console without killing the server, press `CTRL + P` followed by `CTRL + Q`.
+
+To send a single command without attaching, use `cs console` (below); its output is in `podman logs counter-strike`.
+
+## Commands
+
+`cs` runs in the container, for what you'd otherwise restart it for:
+
+```sh
+podman exec counter-strike cs <command>
+```
+
+| Command | |
+|---|---|
+| `reload` | link the packs again after editing `data/packlist` or the tags file: maps, plugins, FastDL, the map cycle. New plugins load with the next map, see [Packs](#packs) |
+| `reload --now` | the same, then restart the current map so they load now (players reconnect) |
+| `tags` | every tag and what has it, and names in the tags file that match nothing, see [Tags](#tags) |
+| `save <download> [dir]` | keep a download in `packs/` as a zip with its URL, see [Where a pack came from](#where-a-pack-came-from) |
+| `console <command>` | send a command to the server's console, like `cs console changelevel de_dust2`; the output is in the container's logs |
+| `help` | this list |
+
+Settings from environment variables still need the container recreated (`podman compose up -d`).
 
 # ☦
 

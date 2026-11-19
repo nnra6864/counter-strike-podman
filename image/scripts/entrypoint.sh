@@ -67,22 +67,34 @@ fi
 if [ -n "$maxplayers" ]; then set -- "$@" +maxplayers "$maxplayers"; fi
 if [ -n "$map" ]; then set -- "$@" +map "$map"; fi
 
-[ -n "$hltv" ] || exec "$@"
-
-# With HLTV, stay around: on stop, HLTV finishes its demo before the server goes, or the
-# demo is left without its directory. The server keeps the console (stdin, a background
-# command would get /dev/null)
+# The server's console reads a FIFO, so `cs console <command>` can send it commands. Held
+# open read-write here, so it never sees EOF. What's typed on the attached console
+# (podman attach) is passed on to it
+FIFO=/tmp/server.in
+rm -f "$FIFO" && mkfifo "$FIFO"
+exec 3<>"$FIFO"
 set +e
-exec 3<&0
-"$@" <&3 3<&- &
+# A background command's stdin would be /dev/null: hand it the console as another fd
+exec 4<&0
+cat <&4 >&3 4<&- &
+exec 4<&-
+# Its output through a pipe too: with stdin a FIFO and stdout the terminal, HLDS crashes on
+# start (segfault after the first map loads)
+OUT=/tmp/server.out
+rm -f "$OUT" && mkfifo "$OUT"
+cat "$OUT" &
+"$@" <&3 >"$OUT" 2>&1 &
 server=$!
-exec 3<&-
+# On stop, HLTV finishes its demo before the server goes, or the demo is left without its
+# directory
 stopping=
 stop() {
 	[ -n "$stopping" ] && return
 	stopping=1
-	kill -TERM "$hltv" 2>/dev/null
-	wait "$hltv"
+	if [ -n "$hltv" ]; then
+		kill -TERM "$hltv" 2>/dev/null
+		wait "$hltv"
+	fi
 	kill -TERM "$server" 2>/dev/null
 }
 trap stop TERM INT
