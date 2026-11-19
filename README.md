@@ -89,7 +89,7 @@ They all use port 27015 unless you change `ports` in `compose.yaml`, so only one
 
 | | |
 |---|---|
-| `compose.yaml` | the container: ports, volumes, command |
+| `compose.yaml` | the container: ports, volumes, restart policy |
 | `compose.override.yaml` | yours, gitignored: what this server changes |
 | `presets/` | settings as env files: `defaults.env` for every server, `competitive.env` on top for 5v5 |
 | `Dockerfile` | builds the image: ReHLDS, ReGameDLL, Metamod-R, AMX Mod X, ReAPI, the plugins, goldsrc-hltv-voice |

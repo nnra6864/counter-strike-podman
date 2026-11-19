@@ -167,7 +167,9 @@ COPY --from=voice /out/bin/goldsrc-hltv-voice /usr/local/bin/
 
 EXPOSE 27015/udp 27015/tcp
 ENTRYPOINT ["/opt/hlds/entrypoint.sh"]
-CMD ["./hlds_run", "-game", "cstrike", "+ip", "0.0.0.0", "+map", "de_dust2", "+maxplayers", "32", "+sv_lan", "0"]
+# Only what has to be on the command line: the rest are cvars (CVAR_*, server.cfg, which the
+# server runs on its own at startup). The entrypoint adds +maxplayers from MAXPLAYERS
+CMD ["./hlds_run", "-game", "cstrike", "+ip", "0.0.0.0", "+map", "de_dust2"]
 
 # Our scripts last, so editing them only rebuilds this small layer.
 # ENABLE_* picks the components, CVAR_*, AMXX_* and METAMOD_* edit the configs, HLTV_* configure HLTV.

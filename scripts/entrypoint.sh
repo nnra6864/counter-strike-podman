@@ -15,7 +15,7 @@ case $(printf %s "$ENABLE_HLTV" | tr '[:upper:]' '[:lower:]') in
 1 | on | true | yes | enable | enabled) /opt/hlds/hltv.sh & ;;
 esac
 
-# MAXPLAYERS replaces the command's +maxplayers, so presets can set it
+# +maxplayers from MAXPLAYERS, replacing one already in the command, so presets can set it
 if [ -n "${MAXPLAYERS:-}" ]; then
 	skip=0
 	for arg; do
