@@ -326,7 +326,9 @@ server {
 }
 ```
 
-Use plain `http://` for `FASTDL_URL`, with no redirect to HTTPS on that host: it isn't known whether the game client can download over HTTPS.
+Use plain `http://` for `FASTDL_URL`, with no redirect to HTTPS on that host: the game client doesn't download over HTTPS (with an `https://` URL it falls back to the slow in-game download). It also remembers a server's download URL until the game is restarted, so after changing it, test with a fresh game.
+To check FastDL from a player's machine, use `curl -I http://.../maps/<map>.bsp`, not a browser: browsers try HTTPS first and get some other site on that host.
+Players on the server's own network may not reach it through its public address (routers often don't loop that back): resolve the FastDL name to the server's local address there, or the client quietly falls back to the slow download.
 The web server has to be able to read the files, which `cs reload` makes world-readable. `FASTDL_URL` can be 127 characters at most.
 
 ### Replays
