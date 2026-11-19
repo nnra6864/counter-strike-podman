@@ -62,5 +62,5 @@ From the source: ReHLTV writes every `svc_voicedata` it gets into the demo (`Dem
 - [x] FastDL: `FASTDL_URL` sets `sv_downloadurl` and writes `fastdl/<name>/`, relative links to exactly this server's files, for Angie (2026-11-19)
 - [ ] HTTPS for `sv_downloadurl`: unknown whether the client supports it. Test: `FASTDL_URL: https://...`, join with a map you don't have, watch the console
 - [x] Build files in `image/` (Dockerfile, scripts, the plugin and tool submodules), so the repo's top is what you touch to run a server (2026-11-19)
-- [ ] `data/plugins/`: AMXX plugins (`.sma`/`.amxx`) listed, compiled, linked and enabled the same way
+- [x] Plugins in packs instead of a `data/plugins/`: `.sma` compiled (cached), linked, in `plugins.ini` between `; packs:` lines in packlist order, configs copied once. Packs in `packs/` can be archives or lone `.bsp`/`.sma`/`.amxx`, unpacked into `.cache/`; dirs that aren't packs group them (`maps/fy_snow`, `maps`, `maps/de_*`). Origin from a zip comment or a `.url` file; `packs save <download> [dir]` keeps a download in `packs/`, tagged, the download kept as it came in `.original/` (2026-11-19)
 - [ ] A competitive map pool for `presets/competitive.env`? (a packlist is per server, so maybe `presets/competitive.packlist` to copy)

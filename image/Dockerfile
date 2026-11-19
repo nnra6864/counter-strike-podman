@@ -165,11 +165,12 @@ RUN cd /src && zig build test && zig build -Doptimize=ReleaseSafe --prefix /out 
 # Stage 3: minimal runtime
 FROM debian:bookworm-slim AS runtime
 
-# curl, jq and bsdtar (libarchive-tools: zip, rar, 7z) download packs, see scripts/packs.sh
+# curl, jq and bsdtar (libarchive-tools: zip, rar, 7z) download packs, zip and unzip read and
+# write the URL in a zip's comment, see scripts/packs.sh
 RUN dpkg --add-architecture i386 && \
     apt-get update && \
     apt-get install -y --no-install-recommends libc6:i386 libstdc++6:i386 lib32gcc-s1 ca-certificates \
-        curl jq libarchive-tools && \
+        curl jq libarchive-tools zip unzip && \
     update-ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 

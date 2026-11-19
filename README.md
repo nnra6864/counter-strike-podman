@@ -104,11 +104,11 @@ They all use port 27015 unless you change `ports` in `compose.yaml`, so only one
 | `presets/` | settings as env files: `defaults.env` for every server, `competitive.env` on top for 5v5 |
 | `image/` | what the image is built from; nothing in it needs editing to run a server |
 | `image/Dockerfile` | builds the image: ReHLDS, ReGameDLL, Metamod-R, AMX Mod X, ReAPI, the plugins, goldsrc-demo-tools |
-| `image/scripts/` | run inside the container on every start: `entrypoint.sh` runs `components.sh` (which components load), `packs.sh` (links the maps in, also the `packs` command, see [Maps](#maps)), `env-config.sh` (applies the environment variables to the configs), and `hltv.sh` (HLTV, recording while players are on; it starts `demos.sh`, which repairs, deletes or writes a `.mka` for each finished demo) |
+| `image/scripts/` | run inside the container on every start: `entrypoint.sh` runs `components.sh` (which components load), `packs.sh` (links the packs in, maps and plugins, also the `packs` command, see [Packs](#packs)), `env-config.sh` (applies the environment variables to the configs), and `hltv.sh` (HLTV, recording while players are on; it starts `demos.sh`, which repairs, deletes or writes a `.mka` for each finished demo) |
 | `image/plugins/` | our AMX Mod X plugins, compiled into the image: [hltv-tools](https://github.com/nnra6864/hltv-tools) (a git submodule) |
 | `image/tools/` | [goldsrc-demo-tools](https://github.com/nnra6864/goldsrc-demo-tools) (a git submodule), built into the image |
 | `cstrike/` | the server's files and configs, created on first start, gitignored |
-| `data/` | ours, gitignored: the packlist, packs, downloads, FastDL, see [Maps](#maps) |
+| `data/` | ours, gitignored: the packlist, packs, downloads, FastDL, see [Packs](#packs) |
 
 ## Configuring
 
@@ -136,18 +136,34 @@ Everything ships in the image, and `ENABLE_*` decides what the server loads:
 Set them all to `0` for a plain ReHLDS server.
 The binaries (game dll, metamod, AMXX dlls and modules) are refreshed from the image on every start, so rebuilding the image upgrades them. Configs and plugins in `cstrike` are never overwritten.
 
-### Maps
+### Packs
 
-Maps come in packs: a dir per pack, laid out like `cstrike` (`maps/de_x.bsp`, `gfx/env/`, `sound/`, `x.wad`), linked into `cstrike`.
-Not just maps: models, sounds and sprites in a pack are linked the same way.
+Maps, AMX Mod X plugins, models, sounds and sprites come in packs: anything laid out like `cstrike` (`maps/de_x.bsp`, `gfx/env/`, `sound/`, `x.wad`, `addons/amxmodx/`), linked into `cstrike`.
 They live in `data/`, next to `cstrike/`: `data/` is what you put together, `cstrike/` is the game's.
 
 ```
 data/
   packlist           which packs this server uses
-  packs/<name>/      yours, put whatever you like in them
+  packs/             yours: put whatever you like in it, in any dirs
   downloads/<name>/  from URLs in the packlist, deleted once no packlist has them
   fastdl/<server>/   what players download, see FastDL below
+  .cache/            archives from packs/ unpacked, plugins compiled
+```
+
+A pack in `packs/` is a dir laid out like `cstrike`, or a file as you downloaded it: a `.zip`, `.rar` or `.7z` (whatever its layout), a `.bsp`, a plugin's `.sma` or `.amxx`.
+Archives are unpacked into `.cache/` when used, and again when they change; the file itself is never touched.
+Dirs that aren't packs just group them, so `packs/` can look like this:
+
+```
+packs/
+  maps/
+    fy_snow.zip
+  xmas/
+    de_dust2_xmas_2.zip
+  plugins/
+    knife_round.zip
+    hello.sma
+  mypack/            a pack dir: maps/, sound/, ...
 ```
 
 `default` is the maps CS ships with, kept in the image.
@@ -158,19 +174,24 @@ The first start writes one with `default` and `*`.
 | In the packlist | |
 |---|---|
 | `default` | the maps CS ships with |
-| `mypack` | `packs/mypack` |
-| `mypack/de_*` | only these maps from it (and its other files) |
-| `*` | every dir in `packs/` |
+| `mypack` | `packs/mypack`: a dir, or `mypack.zip` (`.rar`, `.7z`, `.bsp`, `.sma`, `.amxx`) |
+| `maps/fy_snow` | `packs/maps/fy_snow.zip` |
+| `maps` | every pack in `packs/maps` |
+| `maps/de_*` | the packs in it with these names |
+| `mypack/de_*` | only these maps from a pack (and its other files) |
+| `*` | every pack in `packs/`, plugins too |
 | `-cs_*` | leave these maps out, from whichever pack |
 | `https://gamebanana.com/mods/83651` | a GameBanana page: its newest file, checked against GameBanana's checksum. A `gamebanana.com/dl/<id>` link picks a file |
-| `https://.../maps.zip` | any direct link to a `.zip`, `.rar`, `.7z` or `.bsp` |
+| `https://.../maps.zip` | any direct link to a `.zip`, `.rar`, `.7z`, `.bsp`, `.sma` or `.amxx` |
 | `name=https://...` | the same, into `downloads/name` |
 
 ```
 default
 -cs_*
 -as_*
-mypack
+maps
+xmas/de_dust2_xmas_2
+plugins/knife_round
 https://gamebanana.com/mods/83651
 aim=https://example.com/aim_maps.zip
 ```
@@ -181,8 +202,8 @@ After editing it, while the server runs:
 podman exec counter-strike packs
 ```
 
-New maps work from the next map change; the container also does this on every start.
-Each URL is downloaded once, and laid out like `cstrike` whatever the archive looks like (loose `.bsp`s go in `maps/`, skies in `gfx/env/`). Its source is in `downloads/<name>/.source`.
+New maps and plugins work from the next map change; the container also does this on every start.
+Each URL is downloaded once, and laid out like `cstrike` whatever the archive looks like (loose `.bsp`s go in `maps/`, skies in `gfx/env/`, `.sma`s in `addons/amxmodx/scripting/`). Its source is in `downloads/<name>/.source`, and the file as it came in `downloads/<name>/.original/`.
 
 The map cycle is every map from the packs, in packlist order (`cstrike/packs_mapcycle.txt`); within a pack, its `mapcycle.txt` first (`default` has the stock one), then the rest by name. `MAPCYCLE: "0"` keeps `mapcycle.txt`.
 If `MAP` is one the packs left out, the server starts on the first map in the cycle.
@@ -190,9 +211,40 @@ If `MAP` is one the packs left out, the server starts on the first map in the cy
 The links are listed in `cstrike/packs_links.txt` and taken down each time before the new ones go up. Files already in `cstrike` (not links) are never replaced, so maps put straight into `cstrike/maps` still work.
 Volumes from before packs have the stock maps as files in `cstrike/maps`: the first start removes the ones that are the same as the image's, and links them back from `default`.
 
+#### Plugins
+
+A pack's AMX Mod X plugins go in with it:
+
+- Its `addons/amxmodx/scripting/*.sma` are compiled with the image's `amxxpc` (and its `scripting/include/`), once for the same source. A plugin that doesn't compile is left out, with the errors in the log. A compiled `.amxx` in the pack is used as it is, unless there's source for it.
+- They're added to `addons/amxmodx/configs/plugins.ini` between `; packs:` lines, in packlist order, and taken out when the packlist drops them. A plugin `plugins.ini` already lists elsewhere stays where it is.
+- `AMXX_PLUGIN_<NAME>: "0"` still turns one off (or `debug`, see [Environment variables](#environment-variables)).
+- Configs (anything in `addons/amxmodx/configs/`, any `.cfg` or `.ini`) are copied, not linked, and only when `cstrike` doesn't have them yet: each server keeps its own, and `CVAR_` settings never write into the library.
+- Plugins need AMX Mod X (`ENABLE_AMXMODX`); without it they're left out.
+
+Archives from AlliedModders are put into shape like maps: `addons/amxmodx/...`, an `amxmodx/` dir, `scripting/` and `plugins/` dirs (with `configs/` and `data/lang/` next to them), or loose `.sma`, `.inc` and `.amxx` files.
+
+#### Where a pack came from
+
+A URL in a zip's comment (`zip -z`) is where it came from; for other files, a `.url` file next to them with the URL in it (`fy_snow.url` for `fy_snow.rar`). `packs` shows it in the log:
+
+```
+[packs] packs/maps/fy_snow.zip (https://gamebanana.com/mods/86704): 1 maps, 9 files
+```
+
+To keep a download in `packs/` with its URL:
+
+```sh
+podman exec counter-strike packs save fy_snow          # into packs/maps/ (or packs/plugins/)
+podman exec counter-strike packs save fy_snow xmas     # into packs/xmas/
+```
+
+It copies the file as it was downloaded, after checking it against GameBanana's checksum again, and puts the URL in its comment. Then replace the URL in the packlist with the name it prints (`maps/fy_snow`), and the download goes away once no packlist has it.
+The download itself is never changed. A zip's comment is outside the files in it, so the maps in it are the same bytes, but the zip's own checksum isn't GameBanana's any more. `.rar` and `.7z` files are copied as they are, with a `.url` file.
+Downloads from before `.original/` was kept are saved as a zip of what was unpacked.
+
 #### Sharing packs between servers
 
-Mount one dir on `/opt/hlds/library` in each server's `compose.override.yaml`, and it holds `packs/`, `downloads/` and `fastdl/` for all of them instead of `data/` (the packlist stays in each server's `data/`):
+Mount one dir on `/opt/hlds/library` in each server's `compose.override.yaml`, and it holds `packs/`, `downloads/`, `fastdl/` and `.cache/` for all of them instead of `data/` (the packlist stays in each server's `data/`):
 
 ```yml
 services:
@@ -210,7 +262,7 @@ Retiring a server: delete its `servers/<name>` and `fastdl/<name>`.
 #### FastDL
 
 Players download the maps they don't have from the game server, which is slow for big maps.
-With `FASTDL_URL`, they get them over HTTP instead (`sv_downloadurl`): `fastdl/<name>/` is written next to the packs, laid out like `cstrike`, with links to exactly the files this server uses (not `default`, players have those; never configs).
+With `FASTDL_URL`, they get them over HTTP instead (`sv_downloadurl`): `fastdl/<name>/` is written next to the packs, laid out like `cstrike`, with links to exactly the files this server uses (not `default`, players have those; never `addons/` or configs).
 The links are relative, so a web server can serve the dir from wherever the library is on the host:
 
 ```nginx
