@@ -56,14 +56,33 @@ FIFO=/tmp/hltv.in
 rm -f "$FIFO" && mkfifo "$FIFO"
 exec 3<>"$FIFO"
 
+# The entrypoint sends TERM on stop: HLTV finishes its demo (writes the directory) and quits.
+# Ctrl+C on the attached console is meant for the server: HLTV ignores it
+stopping=
+stop() {
+	stopping=1
+	echo "[hltv] stopping: finishing the demo"
+	printf 'stoprecording\nquit\n' >&3
+}
+trap stop TERM
+trap '' INT
+
 # Give the server a head start, autoretry covers the rest
-sleep 5
-while :; do
+sleep 5 &
+wait $!
+while [ -z "$stopping" ]; do
 	echo "[hltv] starting on port $HLTV_PORT, commands:"
 	printf '%s' "$CMDS" | sed 's/^/[hltv]   /'
 	# Queued in the FIFO, read once the console is up
 	printf '%s' "$CMDS" >&3
-	./hltv -port "$HLTV_PORT" <&3 2>&1 | sed -u 's/^/[hltv] /'
+	# In the background: a trapped signal only interrupts `wait`, not a running command
+	./hltv -port "$HLTV_PORT" <&3 2>&1 | sed -u 's/^/[hltv] /' &
+	pid=$!
+	wait $pid
+	while kill -0 $pid 2>/dev/null; do wait $pid; done
+	[ -n "$stopping" ] && break
 	echo "[hltv] exited, restarting in 10s"
-	sleep 10
+	sleep 10 &
+	wait $!
 done
+echo "[hltv] stopped"

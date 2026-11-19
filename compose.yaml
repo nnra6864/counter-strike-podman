@@ -8,6 +8,8 @@ services:
 
     # Fixes the 10 second delay when stopping and SIGKILL
     init: true
+    # Time to finish the demo being recorded before podman kills everything
+    stop_grace_period: 30s
 
     # Pasta results in minimal latency whilst still allowing for port mapping
     network_mode: "pasta"
