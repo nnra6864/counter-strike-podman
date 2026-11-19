@@ -73,10 +73,12 @@ RUN wget https://github.com/rehlds/ReAPI/releases/download/${REAPI_VER}/reapi-bi
     unzip -q reapi-bin-${REAPI_VER}.zip -d cstrike/ && \
     rm reapi-bin-${REAPI_VER}.zip
 
-# Compile our own plugins (see plugins/), enabled through env vars
+# Compile our own plugins (plugins/, git submodules), enabled through env vars
 COPY --chown=steam:steam plugins/ /tmp/plugins/
+RUN [ -f /tmp/plugins/hltv-tools/hltv_tools.sma ] || { \
+        echo "plugins/hltv-tools is empty: run git submodule update --init" >&2; exit 1; }
 RUN cd cstrike/addons/amxmodx/scripting && \
-    for f in /tmp/plugins/*.sma; do \
+    for f in /tmp/plugins/*/*.sma; do \
         ./amxxpc "$f" -o"../plugins/$(basename "$f" .sma).amxx" || exit 1; \
     done
 
@@ -125,11 +127,9 @@ FROM debian:bookworm-slim AS demo-tools
 ARG ZIG_VER=0.17.1
 ARG OPUS_VER=1.6.1
 ARG OPUS_SHA256=6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1
-ARG DEMO_TOOLS_REPO=https://git.nnstdios.com/nnra6864/goldsrc-demo-tools.git
-ARG DEMO_TOOLS_REF=3708fcfce23c45357a0cec2a93c0a98daf86fb27
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates curl xz-utils git gcc make libc6-dev pkgconf && \
+    apt-get install -y --no-install-recommends ca-certificates curl xz-utils gcc make libc6-dev pkgconf && \
     rm -rf /var/lib/apt/lists/*
 # libopus from source, linked statically: bookworm's 1.3.1 decodes quiet stretches a little
 # differently from the 1.6.1 the tool is tested with, enough to fail its speech timing tests
@@ -141,10 +141,12 @@ RUN curl -fsSL -o /tmp/opus.tar.gz https://downloads.xiph.org/releases/opus/opus
     cd / && rm -rf /tmp/opus*
 RUN curl -fsSL https://ziglang.org/download/${ZIG_VER}/zig-x86_64-linux-${ZIG_VER}.tar.xz | tar -xJ -C /opt && \
     ln -s /opt/zig-x86_64-linux-${ZIG_VER}/zig /usr/local/bin/zig
-# The tests check voice placement against the reference fixtures, with this libopus
-RUN git clone -q "$DEMO_TOOLS_REPO" /src && \
-    git -C /src checkout -q "$DEMO_TOOLS_REF" && \
-    cd /src && zig build test && zig build -Doptimize=ReleaseSafe --prefix /out && \
+# tools/goldsrc-demo-tools is a git submodule. The tests check voice placement against the
+# reference fixtures, with this libopus
+COPY tools/goldsrc-demo-tools/ /src/
+RUN [ -f /src/build.zig ] || { \
+        echo "tools/goldsrc-demo-tools is empty: run git submodule update --init" >&2; exit 1; }
+RUN cd /src && zig build test && zig build -Doptimize=ReleaseSafe --prefix /out && \
     /out/bin/goldsrc-demo-tools voice testdata/one-player.dem --dump > /dev/null
 
 

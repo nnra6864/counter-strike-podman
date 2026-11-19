@@ -18,11 +18,16 @@ sudo pacman -S podman passt
 
 ## Building
 
-Everything is automated, simply run:
+Clone with the submodules (the plugin and the demo tools are their own repos), then build:
 
 ```sh
+git clone --recurse-submodules https://github.com/nnra6864/counter-strike-podman
+cd counter-strike-podman
 podman compose build
 ```
+
+The submodules come from wherever you cloned this repo: GitHub here, or a mirror with the same repo names next to it.
+Cloned without them, run `git submodule update --init` first; the build says so if they're missing.
 
 This might take a few minutes depending on your disk and network speeds.
 
@@ -75,9 +80,12 @@ The preset itself stays in the repo, so `git pull` brings its updates.
 
 ```sh
 git pull
+git submodule update --init
 podman compose build
 podman compose up -d --force-recreate
 ```
+
+`git pull` alone doesn't update the submodules (`git config submodule.recurse true` makes it).
 
 `--force-recreate` because podman-compose doesn't notice a new image or a changed env file on its own, and would keep the old container.
 
@@ -96,7 +104,8 @@ They all use port 27015 unless you change `ports` in `compose.yaml`, so only one
 | `presets/` | settings as env files: `defaults.env` for every server, `competitive.env` on top for 5v5 |
 | `Dockerfile` | builds the image: ReHLDS, ReGameDLL, Metamod-R, AMX Mod X, ReAPI, the plugins, goldsrc-demo-tools |
 | `scripts/` | run inside the container on every start: `entrypoint.sh` runs `components.sh` (which components load), `env-config.sh` (applies the environment variables to the configs), and `hltv.sh` (HLTV, recording while players are on; it starts `demos.sh`, which repairs, deletes or writes a `.mka` for each finished demo) |
-| `plugins/` | our AMX Mod X plugins, compiled into the image |
+| `plugins/` | our AMX Mod X plugins, compiled into the image: [hltv-tools](https://github.com/nnra6864/hltv-tools) (a git submodule) |
+| `tools/` | [goldsrc-demo-tools](https://github.com/nnra6864/goldsrc-demo-tools) (a git submodule), built into the image |
 | `cstrike/` | the server's files and configs, created on first start, gitignored |
 
 ## Configuring
@@ -166,7 +175,7 @@ Every finished demo is handled once, in the background:
 - **Deleted** if nobody joined (`DELETE_EMPTY_DEMOS`). HLTV and bots don't count; anyone who connected does.
 - Otherwise it gets a **`.mka`** next to it, with the voice chat as one Opus track per player, in sync with the demo from the start. Demos with no voice get no `.mka`.
 
-This uses [goldsrc-demo-tools](https://git.nnstdios.com/nnra6864/goldsrc-demo-tools), built into the image.
+This uses [goldsrc-demo-tools](https://github.com/nnra6864/goldsrc-demo-tools) (`tools/`), built into the image.
 
 | Variable | Default | |
 |---|---|---|

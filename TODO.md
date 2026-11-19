@@ -49,3 +49,4 @@ From the source: ReHLTV writes every `svc_voicedata` it gets into the demo (`Dem
 - [x] Container scripts in `scripts/` (2026-11-18)
 - [x] `hltv_voice` became `hltv_tools`: also writes the player count (bots, HLTV not counted) for recording only while someone is on. An old `hltv_voice` line in `plugins.ini` is turned off (2026-11-19)
 - [x] Record only while players are on (`RECORD_IDLE_STOP`), repair demos a crash left unfinished, delete demos nobody joined (`DELETE_EMPTY_DEMOS`), `.mka` for the rest: `hltv.sh`, `demos.sh` (was `voice.sh`), goldsrc-demo-tools (2026-11-19)
+- [x] The plugin (hltv-tools) and goldsrc-demo-tools as git submodules with relative URLs: built from wherever this repo was cloned (GitHub or the Forgejo mirror), no clones during the build (2026-11-19)
