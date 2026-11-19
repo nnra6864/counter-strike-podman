@@ -43,6 +43,8 @@ services:
       CVAR_HOSTNAME: "My Server"
 ```
 
+`MAXPLAYERS` (32) and `MAP` (the starting map, `de_dust2`) set the player slots and the map the server starts on.
+
 Settings are layered, each on top of the one before:
 
 1. `presets/defaults.env`: what every server gets (loaded by `compose.yaml`)
