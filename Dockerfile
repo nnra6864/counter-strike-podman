@@ -113,6 +113,18 @@ exec banned.cfg
 mp_consistency 0
 EOF
 
+# The maps CS ships with, with their descriptions and overviews, as the default pack:
+# scripts/packs.sh links them into cstrike unless data/packlist leaves them out. Its
+# mapcycle.txt orders them in the map cycle
+RUN mkdir -p packs/default/maps packs/default/overviews && \
+    cp cstrike/mapcycle.txt packs/default/ && \
+    for bsp in cstrike/maps/*.bsp; do \
+        m=$(basename "$bsp" .bsp); \
+        for f in cstrike/maps/"$m".* cstrike/maps/"$m"_detail.txt cstrike/overviews/"$m".*; do \
+            if [ -f "$f" ]; then mv "$f" "packs/default/${f#cstrike/}"; fi; \
+        done; \
+    done
+
 # Pristine copy of cstrike. ./cstrike is a bind mount, which hides the image's cstrike dir and
 # is never filled from the image, so the entrypoint seeds an empty one from here, and
 # components.sh restores missing addons and refreshes binaries from it.
@@ -153,9 +165,11 @@ RUN cd /src && zig build test && zig build -Doptimize=ReleaseSafe --prefix /out 
 # Stage 3: minimal runtime
 FROM debian:bookworm-slim AS runtime
 
+# curl, jq and bsdtar (libarchive-tools: zip, rar, 7z) download packs, see scripts/packs.sh
 RUN dpkg --add-architecture i386 && \
     apt-get update && \
-    apt-get install -y --no-install-recommends libc6:i386 libstdc++6:i386 lib32gcc-s1 ca-certificates && \
+    apt-get install -y --no-install-recommends libc6:i386 libstdc++6:i386 lib32gcc-s1 ca-certificates \
+        curl jq libarchive-tools && \
     update-ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
@@ -176,7 +190,10 @@ ENTRYPOINT ["/opt/hlds/entrypoint.sh"]
 # MAXPLAYERS and MAP
 CMD ["./hlds_run", "-game", "cstrike", "+map", "de_dust2"]
 
+# `podman exec <container> packs` relinks the packs after editing data/packlist
+RUN ln -s /opt/hlds/packs.sh /usr/local/bin/packs
+
 # Our scripts last, so editing them only rebuilds this small layer.
-# ENABLE_* picks the components, CVAR_*, AMXX_* and METAMOD_* edit the configs, HLTV_* configure HLTV.
+# ENABLE_* picks the components, data/packlist the maps, CVAR_*, AMXX_* and METAMOD_* edit the configs, HLTV_* configure HLTV.
 # All applied on every start
 COPY --chmod=755 scripts/ /opt/hlds/

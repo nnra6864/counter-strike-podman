@@ -50,3 +50,16 @@ From the source: ReHLTV writes every `svc_voicedata` it gets into the demo (`Dem
 - [x] `hltv_voice` became `hltv_tools`: also writes the player count (bots, HLTV not counted) for recording only while someone is on. An old `hltv_voice` line in `plugins.ini` is turned off (2026-11-19)
 - [x] Record only while players are on (`RECORD_IDLE_STOP`), repair demos a crash left unfinished, delete demos nobody joined (`DELETE_EMPTY_DEMOS`), `.mka` for the rest: `hltv.sh`, `demos.sh` (was `voice.sh`), goldsrc-demo-tools (2026-11-19)
 - [x] The plugin (hltv-tools) and goldsrc-demo-tools as git submodules with relative URLs: built from wherever this repo was cloned (GitHub or the Forgejo mirror), no clones during the build (2026-11-19)
+
+## 6. Maps (packs)
+
+- [x] Packs: a dir per pack, laid out like `cstrike`, symlinked in (`scripts/packs.sh`, links listed in `cstrike/packs_links.txt`). Files already in `cstrike` are never replaced (2026-11-19)
+- [x] The maps CS ships with (with their `maps/*.txt`, `.res` and overviews, and the stock `mapcycle.txt` for their order) as the `default` pack in the image. Old volumes: their files that match the image's are removed and linked back (2026-11-19)
+- [x] `data/` next to `cstrike/`: ours (packlist, packs, downloads, fastdl), `cstrike/` stays the game's (2026-11-19)
+- [x] `data/packlist` instead of an env var, so it can change live: `podman exec <container> packs` relinks, new maps work from the next map change. `pack/de_*`, `*`, `-cs_*`, URLs (GameBanana pages through apiv11 with its MD5, `/dl/` links, any direct `.zip`/`.rar`/`.7z`/`.bsp`), `name=URL`. Any archive layout is put into shape (2026-11-19)
+- [x] Map cycle from the packs (`MAPCYCLE`, on by default). A `MAP` the packs left out falls back to the first map in the cycle (2026-11-19)
+- [x] Shared library on `/opt/hlds/library`: one copy of every file for all servers, per-server `servers/<name>` so a download goes once no server lists it, a lock so servers don't run at once (2026-11-19)
+- [x] FastDL: `FASTDL_URL` sets `sv_downloadurl` and writes `fastdl/<name>/`, relative links to exactly this server's files, for Angie (2026-11-19)
+- [ ] HTTPS for `sv_downloadurl`: unknown whether the client supports it. Test: `FASTDL_URL: https://...`, join with a map you don't have, watch the console
+- [ ] `data/plugins/`: AMXX plugins (`.sma`/`.amxx`) listed, compiled, linked and enabled the same way
+- [ ] A competitive map pool for `presets/competitive.env`? (a packlist is per server, so maybe `presets/competitive.packlist` to copy)

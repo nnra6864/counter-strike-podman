@@ -103,10 +103,11 @@ They all use port 27015 unless you change `ports` in `compose.yaml`, so only one
 | `compose.override.yaml` | yours, gitignored: what this server changes |
 | `presets/` | settings as env files: `defaults.env` for every server, `competitive.env` on top for 5v5 |
 | `Dockerfile` | builds the image: ReHLDS, ReGameDLL, Metamod-R, AMX Mod X, ReAPI, the plugins, goldsrc-demo-tools |
-| `scripts/` | run inside the container on every start: `entrypoint.sh` runs `components.sh` (which components load), `env-config.sh` (applies the environment variables to the configs), and `hltv.sh` (HLTV, recording while players are on; it starts `demos.sh`, which repairs, deletes or writes a `.mka` for each finished demo) |
+| `scripts/` | run inside the container on every start: `entrypoint.sh` runs `components.sh` (which components load), `packs.sh` (links the maps in, also the `packs` command, see [Maps](#maps)), `env-config.sh` (applies the environment variables to the configs), and `hltv.sh` (HLTV, recording while players are on; it starts `demos.sh`, which repairs, deletes or writes a `.mka` for each finished demo) |
 | `plugins/` | our AMX Mod X plugins, compiled into the image: [hltv-tools](https://github.com/nnra6864/hltv-tools) (a git submodule) |
 | `tools/` | [goldsrc-demo-tools](https://github.com/nnra6864/goldsrc-demo-tools) (a git submodule), built into the image |
 | `cstrike/` | the server's files and configs, created on first start, gitignored |
+| `data/` | ours, gitignored: the packlist, packs, downloads, FastDL, see [Maps](#maps) |
 
 ## Configuring
 
@@ -133,6 +134,95 @@ Everything ships in the image, and `ENABLE_*` decides what the server loads:
 
 Set them all to `0` for a plain ReHLDS server.
 The binaries (game dll, metamod, AMXX dlls and modules) are refreshed from the image on every start, so rebuilding the image upgrades them. Configs and plugins in `cstrike` are never overwritten.
+
+### Maps
+
+Maps come in packs: a dir per pack, laid out like `cstrike` (`maps/de_x.bsp`, `gfx/env/`, `sound/`, `x.wad`), linked into `cstrike`.
+Not just maps: models, sounds and sprites in a pack are linked the same way.
+They live in `data/`, next to `cstrike/`: `data/` is what you put together, `cstrike/` is the game's.
+
+```
+data/
+  packlist           which packs this server uses
+  packs/<name>/      yours, put whatever you like in them
+  downloads/<name>/  from URLs in the packlist, deleted once no packlist has them
+  fastdl/<server>/   what players download, see FastDL below
+```
+
+`default` is the maps CS ships with, kept in the image.
+
+`data/packlist` lists the packs in order, one per line, `#` for comments; the first pack wins a file two packs both have.
+The first start writes one with `default` and `*`.
+
+| In the packlist | |
+|---|---|
+| `default` | the maps CS ships with |
+| `mypack` | `packs/mypack` |
+| `mypack/de_*` | only these maps from it (and its other files) |
+| `*` | every dir in `packs/` |
+| `-cs_*` | leave these maps out, from whichever pack |
+| `https://gamebanana.com/mods/83651` | a GameBanana page: its newest file, checked against GameBanana's checksum. A `gamebanana.com/dl/<id>` link picks a file |
+| `https://.../maps.zip` | any direct link to a `.zip`, `.rar`, `.7z` or `.bsp` |
+| `name=https://...` | the same, into `downloads/name` |
+
+```
+default
+-cs_*
+-as_*
+mypack
+https://gamebanana.com/mods/83651
+aim=https://example.com/aim_maps.zip
+```
+
+After editing it, while the server runs:
+
+```sh
+podman exec counter-strike packs
+```
+
+New maps work from the next map change; the container also does this on every start.
+Each URL is downloaded once, and laid out like `cstrike` whatever the archive looks like (loose `.bsp`s go in `maps/`, skies in `gfx/env/`). Its source is in `downloads/<name>/.source`.
+
+The map cycle is every map from the packs, in packlist order (`cstrike/packs_mapcycle.txt`); within a pack, its `mapcycle.txt` first (`default` has the stock one), then the rest by name. `MAPCYCLE: "0"` keeps `mapcycle.txt`.
+If `MAP` is one the packs left out, the server starts on the first map in the cycle.
+
+The links are listed in `cstrike/packs_links.txt` and taken down each time before the new ones go up. Files already in `cstrike` (not links) are never replaced, so maps put straight into `cstrike/maps` still work.
+Volumes from before packs have the stock maps as files in `cstrike/maps`: the first start removes the ones that are the same as the image's, and links them back from `default`.
+
+#### Sharing packs between servers
+
+Mount one dir on `/opt/hlds/library` in each server's `compose.override.yaml`, and it holds `packs/`, `downloads/` and `fastdl/` for all of them instead of `data/` (the packlist stays in each server's `data/`):
+
+```yml
+services:
+  counter-strike:
+    volumes:
+      - /tank/services/counter-strike:/opt/hlds/library:z
+    environment:
+      FASTDL_URL: "http://fastdl.example.com/NnCompetitive/"
+```
+
+Every file is there once: a pack only one server lists is that server's, one several list is shared, and a URL two servers list is downloaded once.
+Each server keeps the downloads it uses in `servers/<name>` there (`<name>` from `FASTDL_URL`, or `SERVER_NAME`), and a download is deleted once no server lists it. Without a name, nothing is deleted.
+Retiring a server: delete its `servers/<name>` and `fastdl/<name>`.
+
+#### FastDL
+
+Players download the maps they don't have from the game server, which is slow for big maps.
+With `FASTDL_URL`, they get them over HTTP instead (`sv_downloadurl`): `fastdl/<name>/` is written next to the packs, laid out like `cstrike`, with links to exactly the files this server uses (not `default`, players have those; never configs).
+The links are relative, so a web server can serve the dir from wherever the library is on the host:
+
+```nginx
+server {
+    listen 80;
+    server_name fastdl.example.com;
+    root /tank/services/counter-strike/fastdl;
+    autoindex off;
+}
+```
+
+Use plain `http://` for `FASTDL_URL`, with no redirect to HTTPS on that host: it isn't known whether the game client can download over HTTPS.
+The web server has to be able to read the files, which `packs` makes world-readable. `FASTDL_URL` can be 127 characters at most.
 
 ### Replays
 

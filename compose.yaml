@@ -20,6 +20,9 @@ services:
     volumes:
       # Volume where all the files and configs live
       - ./cstrike:/opt/hlds/cstrike:U,Z
+      # Ours: the pack list, packs, downloads (see the README). A library shared by several
+      # servers goes on /opt/hlds/library instead
+      - ./data:/opt/hlds/data:U,Z
       # Accurate tz in logs
       - /etc/localtime:/etc/localtime:ro
 

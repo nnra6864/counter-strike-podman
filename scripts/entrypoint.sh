@@ -11,6 +11,23 @@ fi
 # Sourced: it sets defaults for env-config.sh
 . /opt/hlds/components.sh
 
+# Maps and other packs (data/packlist), linked into cstrike. Before env-config.sh: a pack
+# can bring plugins
+/opt/hlds/packs.sh || echo "[packs] failed, starting with the maps cstrike has"
+# The map cycle from the packs (MAPCYCLE). Set even while it's empty, so `packs` can fill
+# it later
+case $(printf %s "${MAPCYCLE:-1}" | tr '[:upper:]' '[:lower:]') in
+1 | on | true | yes | enable | enabled)
+	: "${CVAR_MAPCYCLEFILE:=packs_mapcycle.txt}"
+	export CVAR_MAPCYCLEFILE
+	;;
+esac
+# Players download the packs' files from FASTDL_URL (fastdl/<name>/ in the library)
+if [ -n "${FASTDL_URL:-}" ]; then
+	: "${CVAR_SV_DOWNLOADURL:=${FASTDL_URL%/}/}"
+	export CVAR_SV_DOWNLOADURL
+fi
+
 /opt/hlds/env-config.sh || echo "[env] failed to apply env vars, starting with configs as they are"
 
 hltv=
@@ -38,6 +55,15 @@ for arg; do
 done
 maxplayers=${MAXPLAYERS:-${cmd_maxplayers:-}}
 map=${MAP:-${cmd_map:-}}
+# A starting map the packs left out: the first one in the cycle, or any there is
+if [ -n "$map" ] && [ ! -e "/opt/hlds/cstrike/maps/$map.bsp" ]; then
+	first=$(head -n 1 /opt/hlds/cstrike/packs_mapcycle.txt 2>/dev/null) || true
+	[ -n "$first" ] || first=$(ls /opt/hlds/cstrike/maps 2>/dev/null | sed -n 's/\.bsp$//p' | head -n 1)
+	if [ -n "$first" ]; then
+		echo "[packs] warning: no map $map (MAP), starting on $first"
+		map=$first
+	fi
+fi
 if [ -n "$maxplayers" ]; then set -- "$@" +maxplayers "$maxplayers"; fi
 if [ -n "$map" ]; then set -- "$@" +map "$map"; fi
 
