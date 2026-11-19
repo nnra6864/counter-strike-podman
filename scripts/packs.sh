@@ -390,11 +390,18 @@ fi
 
 # Volumes made before the default pack have its maps as files in cstrike: remove them where
 # they're the same as the image's, so the default pack (or leaving it out) decides
+# The same file, or a text file (.txt, .res) that only has other line endings (older
+# volumes have CRLF)
+same() {
+	cmp -s "$1" "$2" && return 0
+	case $1 in *.txt | *.res) ;; *) return 1 ;; esac
+	[ "$(tr -d '\r' <"$1" | md5sum)" = "$(tr -d '\r' <"$2" | md5sum)" ]
+}
 moved=0
 : >"$TMP/default"
 cd "$DEFAULT" 2>/dev/null && find maps overviews -type f >"$TMP/default"
 while IFS= read -r r; do
-	if [ -f "$GAME/$r" ] && [ ! -L "$GAME/$r" ] && cmp -s "$DEFAULT/$r" "$GAME/$r"; then
+	if [ -f "$GAME/$r" ] && [ ! -L "$GAME/$r" ] && same "$DEFAULT/$r" "$GAME/$r"; then
 		rm -f "$GAME/$r" && moved=$((moved + 1))
 	fi
 done <"$TMP/default"
