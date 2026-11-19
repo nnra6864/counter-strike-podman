@@ -95,7 +95,8 @@ if [ -f "$GAME/addons/metamod/plugins.ini" ]; then
 fi
 [ $amxx = 1 ] && say "AMX Mod X: on" || say "AMX Mod X: off"
 
-# HLTV voice plugin
+# hltv_tools plugin: HLTV hears everyone (voice in demos), and the player count that
+# hltv.sh records by
 voice=0
 if on "$ENABLE_HLTV_VOICE"; then
 	if [ $amxx = 1 ] && on "$ENABLE_REGAMEDLL"; then
@@ -105,14 +106,22 @@ if on "$ENABLE_HLTV_VOICE"; then
 	fi
 fi
 if [ $amxx = 1 ]; then
-	sync_file "$DEFAULTS/addons/amxmodx/plugins/hltv_voice.amxx" "$GAME/addons/amxmodx/plugins/hltv_voice.amxx"
-	if [ $voice = 1 ]; then
-		: "${AMXX_PLUGIN_HLTV_VOICE:=1}"
-		export AMXX_PLUGIN_HLTV_VOICE
-	elif grep -q hltv_voice "$GAME/addons/amxmodx/configs/plugins.ini" 2>/dev/null; then
+	PLUGINS_INI=$GAME/addons/amxmodx/configs/plugins.ini
+	sync_file "$DEFAULTS/addons/amxmodx/plugins/hltv_tools.amxx" "$GAME/addons/amxmodx/plugins/hltv_tools.amxx"
+	if on "$ENABLE_HLTV" || [ $voice = 1 ]; then
+		: "${AMXX_PLUGIN_HLTV_TOOLS:=1}" "${CVAR_HLTV_TOOLS_VOICE:=$voice}"
+		export AMXX_PLUGIN_HLTV_TOOLS CVAR_HLTV_TOOLS_VOICE
+	elif grep -q hltv_tools "$PLUGINS_INI" 2>/dev/null; then
+		: "${AMXX_PLUGIN_HLTV_TOOLS:=0}"
+		export AMXX_PLUGIN_HLTV_TOOLS
+	fi
+	# hltv_voice was replaced by hltv_tools
+	if grep -q hltv_voice "$PLUGINS_INI" 2>/dev/null; then
 		: "${AMXX_PLUGIN_HLTV_VOICE:=0}"
 		export AMXX_PLUGIN_HLTV_VOICE
 	fi
+elif on "$ENABLE_HLTV"; then
+	say "warning: without AMX Mod X, HLTV can't tell when players are on: it records all the time"
 fi
 if on "$ENABLE_HLTV"; then
 	[ $voice = 1 ] && say "HLTV: on, with voice" || say "HLTV: on"

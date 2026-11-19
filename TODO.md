@@ -47,3 +47,4 @@ From the source: ReHLTV writes every `svc_voicedata` it gets into the demo (`Dem
 
 - [x] Competitive as a preset instead of a `competitive` branch; every server runs master (2026-11-18). Presets are env files (`presets/defaults.env`, `presets/competitive.env`) listed in `compose.override.yaml`, which goes on top: podman-compose 1.6 `include:` merges the included file last (the preset would win) and `extends:` puts the preset under `compose.yaml` (the defaults would win). `MAXPLAYERS` replaces `+maxplayers` so a preset can set it
 - [x] Container scripts in `scripts/` (2026-11-18)
+- [x] `hltv_voice` became `hltv_tools`: also writes the player count (bots, HLTV not counted) for recording only while someone is on. An old `hltv_voice` line in `plugins.ini` is turned off (2026-11-19)
