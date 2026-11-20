@@ -8,6 +8,7 @@
 #   podman exec <container> cs save <download> [dir]      keep a download in packs/
 #   podman exec <container> cs tags                       every tag and what has it
 #   packs.sh tagnames | tag <name> <tag>...               for cs save -t and its picker
+#   podman exec <container> cs remove <pack or map>       delete a pack, and it from the tags
 #
 # data/packlist says which packs, in order; the first one wins a file two packs have. One
 # per line, # for comments:
@@ -971,6 +972,116 @@ if [ "${1:-}" = tag ]; then
 		*) say "tags: couldn't add $name to $t" && exit 1 ;;
 		esac
 	done
+	exit 0
+fi
+
+# packs remove [--dry] <pack or map>: deletes a pack from packs/ (and its .url file), and
+# takes it out of the tags file: its name, its path and its maps' names under [tag.x], and
+# [map.x]/[pack.x]/[plugin.x] sections for them. Patterns (de_*) and @tags stay. --dry
+# says what would go. cs remove asks first
+if [ "${1:-}" = remove ]; then
+	dry=
+	[ "${2:-}" = --dry ] && dry=1 && shift
+	arg=${2:-}
+	[ -n "$arg" ] || { say "usage: cs remove [-r] [-y] <pack or map>" && exit 1; }
+	a=$(lower "${arg%/}")
+	a=${a#packs/}
+	case $a in *.zip | *.rar | *.7z | *.bsp | *.sma | *.amxx) a=${a%.*} ;; esac
+	index
+	awk -F '\t' -v a="$a" 'tolower($1) == a || tolower($2) == a || tolower($3) == a { print $4 }' "$INDEX" |
+		sort -u >"$TMP/hits"
+	case $(wc -l <"$TMP/hits") in
+	0) say "$arg: no pack or map by that name in packs/" && exit 1 ;;
+	1) ;;
+	*)
+		say "$arg: in more than one pack, give the one to remove by its path:"
+		while IFS= read -r f; do say "  cs remove ${f#"$PACKS"/}"; done <"$TMP/hits"
+		exit 1
+		;;
+	esac
+	f=$(cat "$TMP/hits")
+	rel=${f#"$PACKS"/}
+	n=${f##*/} r=$rel
+	if is_pack_file "$f"; then n=${n%.*} r=${r%.*}; fi
+	# Its maps, unless another pack has one by the same name: that one keeps its tags
+	maps=$(awk -F '\t' -v f="$f" '
+		$3 != "" { if ($4 == f) mine[$3] = 1; else other[$3] = 1 }
+		END { for (m in mine) if (!(m in other)) print m }' "$INDEX" | sort | tr '\n' ' ')
+	files=$f
+	for u in "${f%.*}.url" "$f.url"; do
+		[ -f "$u" ] && [ "$u" != "$f" ] && files="$files
+$u"
+	done
+	# The tags file without them, and what went (<section> <tab> <name>)
+	awk -v names="$(lower "$n $r $maps")" -v rep="$TMP/tagrep" '
+	function hdr(s,    w) {
+		sub(/#.*/, "", s)
+		if (!match(s, /^[ \t]*\[[^ \t]*\]/)) return ""
+		w = substr(s, RSTART, RLENGTH)
+		gsub(/[ \t]/, "", w)
+		return tolower(substr(w, 2, length(w) - 2))
+	}
+	function out(s) {
+		if (s ~ /^[ \t]*$/) { if (blank++) return } else blank = 0
+		print s
+	}
+	BEGIN { k = split(names, a, " "); for (i = 1; i <= k; i++) N[a[i]] = 1 }
+	{
+		h = hdr($0)
+		if (h != "") {
+			sec = h
+			kind = h
+			sub(/\..*$/, "", kind)
+			drop = (kind == "map" || kind == "pack" || kind == "plugin") && (substr(h, length(kind) + 2) in N)
+			if (drop) print "[" h "]\t(all of it)" >rep
+		}
+		if (drop) next
+		if (sec !~ /^tag\./) { out($0); next }
+		c = index($0, "#")
+		body = c ? substr($0, 1, c - 1) : $0
+		com = c ? substr($0, c) : ""
+		k = split(body, w)
+		line = ""
+		gone = 0
+		for (j = 1; j <= k; j++) {
+			if (!(h != "" && j == 1) && (tolower(w[j]) in N)) {
+				print "[" sec "]\t" w[j] >rep
+				gone = 1
+				continue
+			}
+			line = line (line == "" ? "" : " ") w[j]
+		}
+		if (!gone) { out($0); next }
+		# A line that had only them goes
+		if (line == "" && com == "") next
+		out(line (com == "" ? "" : (line == "" ? "" : "  ") com))
+	}' "$TAGS" >"$TMP/tags.new" || { say "tags: couldn't read $TAGS" && exit 1; }
+	if [ -n "$dry" ]; then
+		o=$(origin "$f")
+		say "packs/$rel${o:+ ($o)}"
+		[ -z "$maps" ] || say "  maps: ${maps% }"
+		[ -d "$f" ] && say "  a dir: everything in it goes"
+		printf '%s\n' "$files" | tail -n +2 | while IFS= read -r u; do say "  and ${u#"$PACKS"/}"; done
+		if [ -s "$TMP/tagrep" ]; then
+			say "  and from the tags file:"
+			while IFS="$(printf '\t')" read -r sec w; do say "    $sec $w"; done <"$TMP/tagrep"
+		fi
+		# Names this server's packlist uses for it
+		set -f
+		for w in $(sed 's/#.*//' "$LIST"); do
+			case " $(lower "$n $r $maps") " in *" $(lower "$w") "*) say "  data/packlist names it ($w): take that out too" ;; esac
+		done
+		set +f
+		[ -z "$SHARED" ] || say "  the library is shared: servers that use it lose it at their next reload"
+		exit 0
+	fi
+	printf '%s\n' "$files" | while IFS= read -r u; do rm -rf -- "$u"; done
+	say "removed packs/$rel"
+	if [ -s "$TMP/tagrep" ]; then
+		cat "$TMP/tags.new" >"$TAGS"
+		t=$(cut -f 1 "$TMP/tagrep" | sort -u | tr '\n' ' ')
+		say "  and from the tags file: ${t% }"
+	fi
 	exit 0
 fi
 

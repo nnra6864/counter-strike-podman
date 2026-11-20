@@ -16,6 +16,10 @@
 #                                      podman exec -it shows a picker; -t '' for none
 #                        -r            then reload, so a map the packlist picks (by name,
 #                                      pattern or tag) works now: cs console changelevel <map>
+#   remove [-r] [-y] <pack or map>
+#                        delete a pack from packs/, and its name and its maps' from the tags
+#                        file. Says what goes and asks first (podman exec -it), or -y.
+#                        -r: then reload, so this server drops it now
 #   console <command>    send a command to the server's console; its output is in the
 #                        container's logs (podman logs <container>)
 
@@ -107,6 +111,39 @@ save() {
 	fi
 }
 
+remove() {
+	reload='' yes='' what=''
+	while [ $# -gt 0 ]; do
+		case $1 in
+		-r | --reload) reload=1 ;;
+		-y | --yes) yes=1 ;;
+		-*) usage && exit 1 ;;
+		*) [ -z "$what" ] && what=$1 || { usage && exit 1; } ;;
+		esac
+		shift
+	done
+	[ -n "$what" ] || { usage && exit 1; }
+	if [ -z "$yes" ]; then
+		"$PACKS" remove --dry "$what" || exit
+		if [ ! -t 0 ]; then
+			say "nothing removed: podman exec -it to be asked, or cs remove -y $what"
+			exit 1
+		fi
+		printf '[cs] remove it? [y/N] ' >&2
+		read -r answer || answer=
+		case $answer in
+		y | Y | yes) ;;
+		*) say "nothing removed" && exit 1 ;;
+		esac
+	fi
+	"$PACKS" remove "$what" || exit
+	if [ -n "$reload" ]; then
+		"$PACKS" || exit
+	else
+		say "this server has it until cs reload"
+	fi
+}
+
 cmd=${1:-help}
 [ $# -gt 0 ] && shift
 case $cmd in
@@ -125,6 +162,7 @@ reload)
 	;;
 tags) exec "$PACKS" tags ;;
 save) save "$@" ;;
+remove) remove "$@" ;;
 console)
 	[ $# -gt 0 ] || { usage && exit 1; }
 	console "$@"

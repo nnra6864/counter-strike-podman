@@ -313,6 +313,22 @@ Without `-t`, `podman exec -it` shows a picker with every tag in the tags file: 
 The name goes under `[tag.x]` on a line of its own, where it sorts among the names there (or on the header's line, if that's where they are). A new tag gets a `[tag.x]` before the first tag that sorts after it. A pack that's saved already is tagged all the same, so `cs save -t` works for tagging it later too.
 If nothing from the pack ends up in use after `-r`, it says so: the packlist doesn't pick it, or its URL is still there instead of its name.
 
+#### Removing a pack
+
+```sh
+podman exec -it counter-strike cs remove de_dust2_winter16
+```
+
+```
+[packs] packs/maps/de_dust2_winter16.zip (https://gamebanana.com/mods/85466)
+[packs]   and from the tags file:
+[packs]     [tag.competitive] de_dust2_winter16
+[packs]     [tag.snow] de_dust2_winter16
+[cs] remove it? [y/N]
+```
+
+It takes a pack's name, its path in `packs/` (`maps/fy_snow`) or the name of a map in it, and deletes the pack (and its `.url` file) and every mention of it in the tags file: its name and its maps' names under `[tag.x]`, and their `[map.x]` sections. Patterns (`de_*`), `@tags` and the `[tag.x]` headers stay. It says when `data/packlist` names it. Without a terminal it removes nothing unless given `-y`. Servers keep the map until their next `cs reload`; `-r` reloads this one. A removed pack can be had back from a ZFS snapshot of the library.
+
 #### Sharing packs between servers
 
 Mount one dir on `/opt/hlds/library` in each server's `compose.override.yaml`, and it holds `packs/`, `downloads/`, `fastdl/` and `.cache/` for all of them instead of `data/` (the packlist stays in each server's `data/`):
@@ -482,6 +498,7 @@ podman exec counter-strike cs <command>
 | `reload --now` | the same, then restart the current map so they load now (players reconnect) |
 | `tags` | every tag and what has it, and names in the tags file that match nothing, see [Tags](#tags) |
 | `save [-r] [-t tags] <URL> [dir]` | download a map or plugin into `packs/`, as a zip with its URL, see [Where a pack came from](#where-a-pack-came-from). `save` alone lists the packlists' downloads, which can be saved by name. `-t snow,xmas` tags it (with `podman exec -it`, a picker instead), `-r` reloads after, see [Saving with tags](#saving-with-tags-and-a-reload) |
+| `remove [-r] [-y] <pack or map>` | delete a pack from `packs/` and take it out of the tags file, after asking, see [Removing a pack](#removing-a-pack) |
 | `console <command>` | send a command to the server's console, like `cs console changelevel de_dust2`; the output is in the container's logs |
 | `help` | this list |
 
