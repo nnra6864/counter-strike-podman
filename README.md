@@ -210,7 +210,7 @@ podman exec counter-strike cs reload --now   # restarts the current map for it
 ```
 
 New maps can be changed to right away; new plugins load with the next map, which `--now` starts (players reconnect). The container also does this on every start.
-Each URL is downloaded once, and laid out like `cstrike` whatever the archive looks like (loose `.bsp`s go in `maps/`, skies in `gfx/env/`, `.sma`s in `addons/amxmodx/scripting/`). Its source is in `downloads/<name>/.source`, and the file as it came in `downloads/<name>/.original/`.
+Each URL is downloaded once, and laid out like `cstrike` whatever the archive looks like (loose `.bsp`s go in `maps/`, skies in `gfx/env/`, `.sma`s in `addons/amxmodx/scripting/`). Its source is in `downloads/<name>/.source`, and the file as it came in `downloads/<name>/.original/`. A download with one map is named after the map (the name `changelevel` and the tags file use), one with one plugin after the plugin, anything else after the GameBanana page's title (or the file's name); `name=URL` names it yourself.
 
 The map cycle is every map from the packs, in packlist order (`cstrike/packs_mapcycle.txt`); within a pack, its `mapcycle.txt` first (`default` has the stock one), then the rest by name. `MAPCYCLE: "0"` keeps `mapcycle.txt`.
 If `MAP` is one the packs left out, the server starts on the first map in the cycle.

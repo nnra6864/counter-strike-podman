@@ -362,7 +362,14 @@ fetch() {
 		return 1
 	}
 	if [ -z "$name" ]; then
-		name=$(clean_name "$title")
+		# One map, or one plugin: named after it, the name the game knows it by. Anything
+		# else after the page's title (or the file's name), as the author's file names
+		# often carry versions and the like
+		own=$(find "$tmp/pack/maps" -maxdepth 1 -type f -iname '*.bsp' 2>/dev/null | sed 's|.*/||; s|\.[^.]*$||')
+		[ -n "$own" ] || own=$(find "$tmp/pack/addons/amxmodx/scripting" "$tmp/pack/addons/amxmodx/plugins" \
+			-maxdepth 1 -type f \( -iname '*.sma' -o -iname '*.amxx' \) 2>/dev/null | sed 's|.*/||; s|\.[^.]*$||' | sort -u)
+		[ "$(printf '%s\n' "$own" | grep -c .)" = 1 ] || own=
+		name=$(clean_name "${own:-$title}")
 		[ -n "$name" ] || name=pack
 		base=$name i=2
 		while [ -e "$DOWNLOADS/$name" ]; do
@@ -839,9 +846,9 @@ if [ "${1:-}" = save ]; then
 	mv "$tmp" "$dest"
 	say "saved $url"
 	say "  as packs/$rel, with the URL in the zip's comment"
-	# The maps go by their own names, which the pack's (from the page's title) may not be
+	# The maps go by their own names, which a pack of several is named apart from
 	m=$(find "$d/maps" -maxdepth 1 -type f -iname '*.bsp' 2>/dev/null | sed 's|.*/||; s|\.[^.]*$||' | sort | tr '\n' ' ')
-	[ -z "$m" ] || say "  maps in it (for changelevel): ${m% }"
+	[ -z "$m" ] || [ "$m" = "$name " ] || say "  maps in it (for changelevel): ${m% }"
 	if [ -n "$fetched" ]; then
 		say "  use it by name in a packlist or the tags file: $name"
 	else
