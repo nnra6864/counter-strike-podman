@@ -839,6 +839,9 @@ if [ "${1:-}" = save ]; then
 	mv "$tmp" "$dest"
 	say "saved $url"
 	say "  as packs/$rel, with the URL in the zip's comment"
+	# The maps go by their own names, which the pack's (from the page's title) may not be
+	m=$(find "$d/maps" -maxdepth 1 -type f -iname '*.bsp' 2>/dev/null | sed 's|.*/||; s|\.[^.]*$||' | sort | tr '\n' ' ')
+	[ -z "$m" ] || say "  maps in it (for changelevel): ${m% }"
 	if [ -n "$fetched" ]; then
 		say "  use it by name in a packlist or the tags file: $name"
 	else

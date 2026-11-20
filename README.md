@@ -309,7 +309,7 @@ podman exec counter-strike cs save -r -t snow,xmas https://gamebanana.com/mods/8
 [cs] de_inferno_snow works now: cs console changelevel de_inferno_snow
 ```
 
-Without `-t`, `podman exec -it` shows a picker with every tag in the tags file: up and down to move, space or tab to pick, type into the slot at the bottom for new tags (spaces or commas between), enter when done, esc for none. Without a terminal it says it didn't tag; `-t ''` is no tags, quietly.
+Without `-t`, `podman exec -it` shows a picker with every tag in the tags file: up and down (or ctrl-k and ctrl-j) to move, space or tab to pick, type into the slot at the bottom for new tags (spaces or commas between), enter when done, esc for none. Without a terminal it says it didn't tag; `-t ''` is no tags, quietly.
 The name goes under `[tag.x]` on a line of its own, where it sorts among the names there (or on the header's line, if that's where they are). A new tag gets a `[tag.x]` before the first tag that sorts after it. A pack that's saved already is tagged all the same, so `cs save -t` works for tagging it later too.
 If nothing from the pack ends up in use after `-r`, it says so: the packlist doesn't pick it, or its URL is still there instead of its name.
 
