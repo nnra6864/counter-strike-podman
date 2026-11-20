@@ -294,6 +294,25 @@ A URL a packlist has downloaded already isn't downloaded again: `cs save` saves 
 A `.rar` or `.7z` becomes a zip of the same files (only a zip can hold the URL), a lone `.bsp`, `.sma` or `.amxx` a zip with it where the game looks for it. Downloads from before `.original/` was kept are saved as a zip of what was unpacked.
 The download itself is never changed. A zip's comment is outside the files in it, so the maps in it are the same bytes, but the zip's own checksum isn't GameBanana's any more.
 
+#### Saving with tags and a reload
+
+`-t` adds the pack to tags in the tags file, and `-r` runs `cs reload` after, so a map the packlist picks (by name, a pattern or a tag) can be played straight away:
+
+```sh
+podman exec counter-strike cs save -r -t snow,xmas https://gamebanana.com/mods/84229
+```
+
+```
+[packs] tagged de_inferno_snow: snow
+[packs] tagged de_inferno_snow: xmas
+...
+[cs] de_inferno_snow works now: cs console changelevel de_inferno_snow
+```
+
+Without `-t`, `podman exec -it` shows a picker with every tag in the tags file: up and down to move, space or tab to pick, type into the slot at the bottom for new tags (spaces or commas between), enter when done, esc for none. Without a terminal it says it didn't tag; `-t ''` is no tags, quietly.
+The name goes under `[tag.x]` on a line of its own, where it sorts among the names there (or on the header's line, if that's where they are). A new tag gets a `[tag.x]` before the first tag that sorts after it. A pack that's saved already is tagged all the same, so `cs save -t` works for tagging it later too.
+If nothing from the pack ends up in use after `-r`, it says so: the packlist doesn't pick it, or its URL is still there instead of its name.
+
 #### Sharing packs between servers
 
 Mount one dir on `/opt/hlds/library` in each server's `compose.override.yaml`, and it holds `packs/`, `downloads/`, `fastdl/` and `.cache/` for all of them instead of `data/` (the packlist stays in each server's `data/`):
@@ -462,7 +481,7 @@ podman exec counter-strike cs <command>
 | `reload` | link the packs again after editing `data/packlist` or the tags file: maps, plugins, FastDL, the map cycle. New plugins load with the next map, see [Packs](#packs) |
 | `reload --now` | the same, then restart the current map so they load now (players reconnect) |
 | `tags` | every tag and what has it, and names in the tags file that match nothing, see [Tags](#tags) |
-| `save <URL> [dir]` | download a map or plugin into `packs/`, as a zip with its URL, see [Where a pack came from](#where-a-pack-came-from). `save` alone lists the packlists' downloads, which can be saved by name |
+| `save [-r] [-t tags] <URL> [dir]` | download a map or plugin into `packs/`, as a zip with its URL, see [Where a pack came from](#where-a-pack-came-from). `save` alone lists the packlists' downloads, which can be saved by name. `-t snow,xmas` tags it (with `podman exec -it`, a picker instead), `-r` reloads after, see [Saving with tags](#saving-with-tags-and-a-reload) |
 | `console <command>` | send a command to the server's console, like `cs console changelevel de_dust2`; the output is in the container's logs |
 | `help` | this list |
 

@@ -7,6 +7,7 @@
 #   podman exec <container> cs reload
 #   podman exec <container> cs save <download> [dir]      keep a download in packs/
 #   podman exec <container> cs tags                       every tag and what has it
+#   packs.sh tagnames | tag <name> <tag>...               for cs save -t and its picker
 #
 # data/packlist says which packs, in order; the first one wins a file two packs have. One
 # per line, # for comments:
@@ -768,6 +769,9 @@ if [ "${1:-}" = save ]; then
 	if [ -s "$TMP/have" ]; then
 		f=$(cat "$TMP/have")
 		say "already saved: packs/${f#"$PACKS"/} is $url"
+		n=${f##*/}
+		is_pack_file "$f" && n=${n%.*}
+		printf '%s\t%s\n' "$n" "${f#"$PACKS"/}"
 		exit 0
 	fi
 	if [ -z "$name" ]; then
@@ -840,6 +844,8 @@ if [ "${1:-}" = save ]; then
 	else
 		say "  in data/packlist, replace the URL with $name: the download goes on the next cs reload"
 	fi
+	# For cs save -t and -r: the pack's name and its path in packs/
+	printf '%s\t%s\n' "$name" "$rel"
 	exit 0
 fi
 
@@ -847,6 +853,114 @@ fi
 if [ "${1:-}" = tags ]; then
 	tags check
 	tags list
+	exit 0
+fi
+
+# packs tagnames: every tag in the tags file, one per line, for cs save's picker. Read the
+# way tags() reads them
+if [ "${1:-}" = tagnames ]; then
+	awk '
+	{ sub(/#.*/, "") }
+	{
+		for (i = 1; i <= NF; i++) {
+			w = $i
+			if (w ~ /^\[.*\]$/) {
+				h = tolower(substr(w, 2, length(w) - 2))
+				k = h
+				sub(/\..*$/, "", k)
+				key = substr(h, length(k) + 2)
+				hm = ""
+				if (key != "" && k == "tag") { hm = "tag"; print key }
+				else if (key != "" && (k == "map" || k == "plugin" || k == "pack")) hm = "item"
+				continue
+			}
+			if (hm == "item") { w = tolower(w); sub(/^@/, "", w); print w }
+		}
+	}' "$TAGS" | sort -u
+	exit 0
+fi
+
+# packs tag <name> <tag>...: adds name to each [tag.x] in the tags file, as a line of its
+# own where it sorts among the names below the header (or on the header's line, if that's
+# where its names are). A tag that isn't there yet gets a [tag.x] before the first tag
+# that sorts after it, or at the end
+if [ "${1:-}" = tag ]; then
+	name=${2:-}
+	[ -n "$name" ] && [ $# -gt 2 ] || { say "usage: packs.sh tag <name> <tag>..." && exit 1; }
+	shift 2
+	for t in "$@"; do
+		t=$(lower "$t")
+		t=${t#@}
+		case $t in
+		'') continue ;;
+		*[!a-z0-9_-]*) say "$t: not a tag name (letters, digits, _ and -): skipped" && continue ;;
+		esac
+		rc=0
+		awk -v n="$name" -v t="$t" '
+		function hdr(s,    w) {
+			sub(/#.*/, "", s)
+			if (!match(s, /^[ \t]*\[[^ \t]*\]/)) return ""
+			w = substr(s, RSTART, RLENGTH)
+			gsub(/[ \t]/, "", w)
+			return tolower(substr(w, 2, length(w) - 2))
+		}
+		function words(s, a) { sub(/#.*/, "", s); return split(s, a) }
+		{ L[NR] = $0; H[NR] = hdr($0) }
+		END {
+			ln = tolower(n)
+			for (i = 1; i <= NR; i++) if (H[i] == "tag." t) { s = i; break }
+			if (!s) {
+				for (i = 1; i <= NR; i++) if (H[i] ~ /^tag\./ && substr(H[i], 5) > t) { at = i; break }
+				for (i = 1; i <= NR; i++) {
+					if (i == at) { print "[tag." t "]"; print n; print "" }
+					print L[i]
+				}
+				if (!at) {
+					if (NR && L[NR] !~ /^[ \t]*$/) print ""
+					print "[tag." t "]"
+					print n
+				}
+				exit 0
+			}
+			e = NR + 1
+			for (i = s + 1; i <= NR; i++) if (H[i] != "") { e = i; break }
+			for (i = s; i < e; i++) {
+				k = words(L[i], w)
+				for (j = (i == s ? 2 : 1); j <= k; j++) if (tolower(w[j]) == ln) exit 3
+			}
+			last = 0
+			at = 0
+			for (i = s + 1; i < e; i++) if (words(L[i], w)) { last = i; if (!at && tolower(w[1]) > ln) at = i }
+			before = 0
+			after = 0
+			hl = ""
+			if (last) { if (at) before = at; else after = last }
+			else if ((k = words(L[s], w)) > 1) {
+				hl = w[1]
+				put = 0
+				for (j = 2; j <= k; j++) {
+					if (!put && tolower(w[j]) > ln) { hl = hl " " n; put = 1 }
+					hl = hl " " w[j]
+				}
+				if (!put) hl = hl " " n
+				if ((c = index(L[s], "#"))) hl = hl "  " substr(L[s], c)
+			} else after = s
+			for (i = 1; i <= NR; i++) {
+				if (i == before) print n
+				print (i == s && hl != "" ? hl : L[i])
+				if (i == after) print n
+			}
+		}' "$TAGS" >"$TMP/tags.new" || rc=$?
+		case $rc in
+		0)
+			# Written over, not replaced: the file keeps its owner and mode
+			cat "$TMP/tags.new" >"$TAGS"
+			say "tagged $name: $t"
+			;;
+		3) say "$name has tag $t already" ;;
+		*) say "tags: couldn't add $name to $t" && exit 1 ;;
+		esac
+	done
 	exit 0
 fi
 
