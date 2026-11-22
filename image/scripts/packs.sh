@@ -157,19 +157,47 @@ gamebanana() {
 		say "$1: GameBanana's API didn't answer: $(cat "$TMP/err")"
 		return 1
 	}
-	# The newest file, when the page has more than one. A gamebanana.com/dl/<file id>
-	# link picks another
-	jq -r '._sName // "",
-		((._aFiles // []) | sort_by(._tsDateAdded) | last | (._sDownloadUrl // "", ._sMd5Checksum // "", ._sFile // "")),
-		(._aGame._idRow // "" | tostring)' "$TMP/gb.json" >"$TMP/gb.txt" || return 1
-	{ read -r title; read -r dl_url; read -r dl_md5; read -r file; read -r game; } <"$TMP/gb.txt"
-	if [ -z "$dl_url" ]; then
+	jq -r '._sName // "", (._aGame._idRow // "" | tostring)' "$TMP/gb.json" >"$TMP/gb.txt" || return 1
+	{ read -r title; read -r game; } <"$TMP/gb.txt"
+	[ "$game" = 4254 ] || say "$1: warning: not a Counter-Strike 1.6 page (game $game)"
+	# Its files, the most downloaded first: url, md5, name, size, date, downloads, the
+	# uploader's note. Without the ones GameBanana archived or found an .exe in (a Windows
+	# installer of the same map, say), unless that's all there is
+	jq -r '(._aFiles // []) as $all
+		| ($all | map(select((._aAnalysisWarnings.contains_exe // null) == null and (._bIsArchived | not)))) as $ok
+		| (if ($ok | length) > 0 then $ok else $all end)
+		| sort_by(-(._nDownloadCount // 0))[]
+		| [._sDownloadUrl // "", ._sMd5Checksum // "", ._sFile // "",
+			(((._nFilesize // 0) / 104857.6 | round) / 10 | tostring) + " MB",
+			(._tsDateAdded // 0 | todate[:10]),
+			(._nDownloadCount // 0 | tostring),
+			(._sDescription // "" | gsub("[\\t\\r\\n]+"; " "))]
+		| @tsv' "$TMP/gb.json" >"$TMP/gb.tsv" || return 1
+	n=$(grep -c . "$TMP/gb.tsv")
+	all=$(jq '._aFiles // [] | length' "$TMP/gb.json")
+	if [ "$n" = 0 ]; then
 		say "$1: the page has no files"
 		return 1
 	fi
-	[ "$game" = 4254 ] || say "$1: warning: not a Counter-Strike 1.6 page (game $game)"
-	n=$(jq '._aFiles | length' "$TMP/gb.json")
-	[ "$n" -gt 1 ] && say "$1: $n files, taking the newest ($file)"
+	[ "$n" -lt "$all" ] && say "$1: left out $((all - n)) of its $all files (an installer, or archived)"
+	[ "$n" = "$all" ] && [ "$(jq '[._aFiles[] | select(._aAnalysisWarnings.contains_exe)] | length' "$TMP/gb.json")" -gt 0 ] &&
+		say "$1: warning: GameBanana found an .exe in every file"
+	k=0
+	if [ "$n" -gt 1 ]; then
+		awk -F '\t' '{ printf "%-24s %8s  %s  %6s dl  %s\n", $3, $4, $5, $6, $7 }' "$TMP/gb.tsv" >"$TMP/gb.rows"
+		if [ -n "${SAVING:-}" ] && [ -t 0 ] && [ -t 2 ]; then
+			k=$("${0%/*}/pick.sh" "${title:-gamebanana-$id}: which file?" 0 <"$TMP/gb.rows") || {
+				say "$1: no file picked"
+				return 1
+			}
+		else
+			say "$1: $n files, taking the most downloaded. To take another, use its link:"
+			awk -F '\t' '{ printf "  %s  %s, %s, %s downloads\n", $1, $3, $5, $6 }' "$TMP/gb.tsv" >&2
+		fi
+	fi
+	sed -n "$((k + 1))p" "$TMP/gb.tsv" >"$TMP/gb.one"
+	dl_url=$(cut -f 1 "$TMP/gb.one") dl_md5=$(cut -f 2 "$TMP/gb.one") file=$(cut -f 3 "$TMP/gb.one")
+	[ "$n" -gt 1 ] && say "$1: taking $file"
 	[ -n "$title" ] || title=gamebanana-$id
 	return 0
 }

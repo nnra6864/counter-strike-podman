@@ -185,7 +185,7 @@ The first start writes one with `default` and `*`.
 | `mypack/de_*` | only these maps from a pack (and its other files) |
 | `*` | every pack in `packs/`, plugins too |
 | `-cs_*` | leave these maps out, from whichever pack |
-| `https://gamebanana.com/mods/83651` | a GameBanana page: its newest file, checked against GameBanana's checksum. A `gamebanana.com/dl/<id>` link picks a file |
+| `https://gamebanana.com/mods/83651` | a GameBanana page, checked against GameBanana's checksum. Files with an `.exe` in them (installers) and archived ones are left out. Of several left, `cs save` on a terminal (`podman exec -it`) asks which, listing size, date, downloads and the uploader's note; otherwise it takes the most downloaded and prints the others' links. A `gamebanana.com/dl/<id>` link picks a file |
 | `https://.../maps.zip` | any direct link to a `.zip`, `.rar`, `.7z`, `.bsp`, `.sma` or `.amxx` |
 | `name=https://...` | the same, into `downloads/name` |
 
