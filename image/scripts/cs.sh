@@ -13,7 +13,9 @@
 #                        or dir), its URL in the zip's comment. Alone: the packlists'
 #                        downloads, which can be saved by name
 #                        -t snow,xmas  add it to these tags in the tags file. Without -t,
-#                                      podman exec -it shows a picker; -t '' for none
+#                                      podman exec -it shows a picker, the tags the
+#                                      autotags file gives it ticked (without a
+#                                      terminal, those are used); -t '' for none
 #                        -r            then reload, so a map the packlist picks (by name,
 #                                      pattern or tag) works now: cs console changelevel <map>
 #   remove [-r] [-y] <pack or map>
@@ -70,11 +72,19 @@ save() {
 	name=$(printf '%s\n' "$got" | cut -f 1)
 	rel=$(printf '%s\n' "$got" | cut -f 2)
 
-	# Tags: from -t, or picked on a terminal
+	# Tags: from -t, or picked on a terminal starting from the autotags file's, or those
 	if [ -n "$ask" ]; then
+		auto=$("$PACKS" autotags "$name" "$rel" | tr '\n' ' ')
 		if [ -t 0 ] && [ -t 2 ]; then
 			# shellcheck disable=SC2046 # one tag per word
-			tags=$(/opt/hlds/tagpick.sh "$name" $("$PACKS" tagnames)) || tags=
+			tags=$(/opt/hlds/tagpick.sh -p "$auto" "$name" $({
+				"$PACKS" tagnames
+				[ -z "$auto" ] || printf '%s\n' $auto
+			} | sort -u)) || tags=
+		elif [ -n "$auto" ]; then
+			tags=$auto
+			say "tagging it as the autotags file says: ${auto% }. cs save -t <tag,...> for others,"
+			say "  -t '' for none, or podman exec -it for a picker"
 		else
 			say "not tagged: cs save -t <tag,...>, or podman exec -it for a picker"
 		fi

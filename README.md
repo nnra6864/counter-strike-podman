@@ -309,7 +309,19 @@ podman exec counter-strike cs save -r -t snow,xmas https://gamebanana.com/mods/8
 [cs] de_inferno_snow works now: cs console changelevel de_inferno_snow
 ```
 
-Without `-t`, `podman exec -it` shows a picker with every tag in the tags file: up and down (or ctrl-k and ctrl-j) to move, space or tab to pick, type into the slot at the bottom for new tags (spaces or commas between), enter when done, esc for none. Without a terminal it says it didn't tag; `-t ''` is no tags, quietly.
+Without `-t`, `podman exec -it` shows a picker with every tag in the tags file, the ones the `autotags` file gives the pack already ticked: up and down (or ctrl-k and ctrl-j) to move, space or tab to pick, type into the slot at the bottom for new tags (spaces or commas between), enter when done, esc for none. Without a terminal it tags it with the `autotags` ones and says so (or says it didn't tag, when there are none); `-t ''` is no tags, quietly.
+
+The `autotags` file sits next to the tags file, in the library, and says which tags a pack starts with, by patterns for its name or the name of a map in it (case doesn't matter):
+
+```ini
+[tag.competitive] de_*
+[tag.zombie] zm_* zp_*
+[tag.zombie-escape] ze_*
+[tag.snow] *snow* *winter*
+[tag.xmas] *xmas* *christmas* *santa*
+```
+
+Headers and names work like the tags file's, but only `[tag.X]`. The first start writes one with defaults for the usual prefixes (`de_`, `cs_`, `aim_`, `awp_`, `fy_`, `ka_`, `zm_`, `ze_`, `deathrun_`, `jail_`, `hns_`, `kz_`, `surf_`, ...) and for snow, xmas and halloween maps. From then on only what the file says is used: change it, add to it, or empty it for no defaults (deleting it writes the defaults again). It's only for `cs save`; the packlist goes by the tags file.
 The name goes under `[tag.x]` on a line of its own, where it sorts among the names there (or on the header's line, if that's where they are). A new tag gets a `[tag.x]` before the first tag that sorts after it. A pack that's saved already is tagged all the same, so `cs save -t` works for tagging it later too.
 If nothing from the pack ends up in use after `-r`, it says so: the packlist doesn't pick it, or its URL is still there instead of its name.
 

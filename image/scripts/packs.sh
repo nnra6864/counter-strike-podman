@@ -8,6 +8,7 @@
 #   podman exec <container> cs save <download> [dir]      keep a download in packs/
 #   podman exec <container> cs tags                       every tag and what has it
 #   packs.sh tagnames | tag <name> <tag>...               for cs save -t and its picker
+#   packs.sh autotags <name> <path>                       the tags cs save starts with
 #   podman exec <container> cs remove <pack or map>       delete a pack, and it from the tags
 #
 # data/packlist says which packs, in order; the first one wins a file two packs have. One
@@ -623,6 +624,43 @@ if [ ! -f "$TAGS" ]; then
 	EOF
 fi
 
+# The tags cs save starts with for a new pack, by its name and its maps' names. Only what
+# this file says is used: the list below is only what it's written with the first time
+AUTOTAGS=$LIB/autotags
+if [ ! -f "$AUTOTAGS" ]; then
+	cat >"$AUTOTAGS" <<-'EOF'
+	# The tags cs save picks for a pack to start with, which the picker shows ticked (and
+	# -t replaces). A pack gets a tag when its name or a map in it matches a pattern under
+	# the tag's header, on its line or below it. Case doesn't matter:
+	#
+	#   [tag.snow] *snow* *winter*      fy_snow, de_dust2_winter16
+	#
+	# Only what's here is used: change it, empty it, add your own.
+
+	[tag.competitive] de_*
+	[tag.hostage] cs_*
+	[tag.vip] as_*
+	[tag.aim] aim_*
+	[tag.awp] awp_*
+	[tag.fy] fy_*
+	[tag.knife] ka_* knife_* 35hp_*
+	[tag.zombie] zm_* zp_*
+	[tag.zombie-escape] ze_*
+	[tag.deathrun] deathrun_* dr_*
+	[tag.jail] jail_* jb_*
+	[tag.hns] hns_*
+	[tag.kz] kz_* bkz_* xc_*
+	[tag.bhop] bhop_*
+	[tag.surf] surf_*
+	[tag.gungame] gg_*
+	[tag.fun] fun_* mg_*
+
+	[tag.snow] *snow* *winter*
+	[tag.xmas] *xmas* *christmas* *santa*
+	[tag.halloween] *halloween*
+	EOF
+fi
+
 # tags <mode> [arg]: query <a+b>: <file> <tab> <map> of everything with all those tags.
 # match <name>: the same for a name. check: warns about names that match nothing.
 # list: every tag and what has it
@@ -916,6 +954,37 @@ if [ "${1:-}" = tagnames ]; then
 			if (hm == "item") { w = tolower(w); sub(/^@/, "", w); print w }
 		}
 	}' "$TAGS" | sort -u
+	exit 0
+fi
+
+# packs autotags <name> <path in packs/>: the tags the autotags file gives this pack, one
+# per line, for cs save to start with
+if [ "${1:-}" = autotags ]; then
+	set -f
+	names=$(lower "${2:-}")
+	f=$PACKS/${3:-}
+	[ -n "${3:-}" ] && [ -e "$f" ] && names="$names $(pack_maps "$f" | tr '[:upper:]' '[:lower:]' | tr '\n' ' ')"
+	awk '
+	function bad(m) { print "[packs] " m > "/dev/stderr" }
+	{ sub(/#.*/, "") }
+	{
+		for (i = 1; i <= NF; i++) {
+			w = tolower($i)
+			if (w ~ /^\[.*\]$/) {
+				t = substr(w, 2, length(w) - 2)
+				if (t ~ /^tag\.[a-z0-9_-]+$/) t = substr(t, 5)
+				else { bad("autotags: " $i ": not a header like [tag.snow], skipping what is under it"); t = "-" }
+				continue
+			}
+			if (t == "") { if (!top++) bad("autotags: " $i ": before any header, skipped") }
+			else if (t != "-") print t "\t" w
+		}
+	}' "$AUTOTAGS" | while IFS="$(printf '\t')" read -r t p; do
+		for n in $names; do
+			# shellcheck disable=SC2254 # p is a pattern
+			case $n in $p) printf '%s\n' "$t" && break ;; esac
+		done
+	done | awk '!seen[$0]++'
 	exit 0
 fi
 

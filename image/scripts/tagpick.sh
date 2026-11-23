@@ -1,7 +1,7 @@
 #!/bin/bash
-# cs save's tag picker: tagpick.sh <name> [tag...] lists the tags, and prints the ones
-# picked plus any typed in, one per line. Needs a terminal (podman exec -it); draws on
-# /dev/tty, so its output can be captured.
+# cs save's tag picker: tagpick.sh [-p 'tag...'] <name> [tag...] lists the tags, those
+# after -p picked to start with, and prints the ones picked plus any typed in, one per line.
+# Needs a terminal (podman exec -it); draws on /dev/tty, so its output can be captured.
 #
 #   up/down, ctrl-k/ctrl-j   move
 #   space or tab             pick or unpick the tag under the cursor
@@ -10,11 +10,19 @@
 #   enter                    done
 #   esc, ctrl-c              no tags (exits 1)
 
+picked=''
+if [[ ${1:-} == -p ]]; then
+	picked=" $2 "
+	shift 2
+fi
 name=$1
 shift
 tags=("$@")
 n=${#tags[@]}
 declare -A on=()
+for ((i = 0; i < n; i++)); do
+	[[ $picked == *" ${tags[$i]} "* ]] && on[$i]=1
+done
 cur=0 top=0 input='' drawn=0
 
 exec 3<>/dev/tty || exit 1
