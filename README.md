@@ -392,7 +392,7 @@ It doesn't accept spectators by default (`HLTV_MAXCLIENTS: "0"`): with voice on,
 | `RECORD_IDLE_STOP` | `120` | seconds with nobody on before recording stops. `0` = record all the time. Needs AMX Mod X (the `hltv_tools` plugin counts the players); without it HLTV records all the time |
 | `HLTV_SERVER` | `127.0.0.1:27015` | server to connect to |
 | `HLTV_PORT` | `27020` | HLTV's own port. Not published, add it to `ports` for live spectators |
-| `HLTV_<CMD>` | | any HLTV command, run as `+<cmd> value`: `HLTV_DELAY`, `HLTV_MAXCLIENTS`, `HLTV_NAME`, `HLTV_HOSTNAME`, ... |
+| `HLTV_<CMD>` | | any HLTV command, sent to its console as `<cmd> "value"` (passwords masked in the log): `HLTV_DELAY`, `HLTV_MAXCLIENTS`, `HLTV_NAME`, `HLTV_HOSTNAME`, ... |
 
 `sv_password` is passed to HLTV automatically. To send it a command at runtime:
 

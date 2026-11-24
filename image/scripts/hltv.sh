@@ -10,8 +10,8 @@
 #                                 connects, stop after this many seconds with nobody on.
 #                                 0 = record all the time. Needs the hltv_tools plugin
 #   DELETE_EMPTY_DEMOS, ENABLE_VOICE_MKA   what happens to finished demos (demos.sh)
-#   HLTV_<CMD>=value              any other HLTV command, run as +<cmd> value
-#                                 (HLTV_DELAY, HLTV_MAXCLIENTS, HLTV_NAME, HLTV_HOSTNAME, ...)
+#   HLTV_<CMD>=value              any other HLTV command, sent to its console as
+#                                 <cmd> "value" (HLTV_DELAY, HLTV_MAXCLIENTS, HLTV_NAME, HLTV_HOSTNAME, ...)
 #
 # HLTV takes one player slot on the server.
 
@@ -38,7 +38,18 @@ on() {
 # Our 64-bit tool, without HLDS's 32-bit libraries
 tool() { env -u LD_LIBRARY_PATH goldsrc-demo-tools "$@"; }
 
-quote() { case $1 in *[[:space:]]*) printf '"%s"' "$1" ;; *) printf %s "$1" ;; esac; }
+# Every value quoted, so a ; in a password can't start another command. The console has
+# no escape for " and a newline would end the command: refused
+quote() {
+	case $1 in
+	*'"'* | *"
+"*)
+		echo "[hltv] a value with \" or a newline can't be passed to the console: $2 skipped" >&2
+		return 1
+		;;
+	esac
+	printf '"%s"' "$1"
+}
 
 # Commands go through the console, not the command line: +commands on the command line
 # were sometimes skipped (HLTV came up unconnected, with its default settings)
@@ -49,7 +60,8 @@ for name in $(env | sed -n 's/^HLTV_\([A-Za-z0-9_]*\)=.*/\1/p' | sort -u); do
 	case $name in SERVER | PORT | RECORD) continue ;; esac
 	eval "value=\${HLTV_$name}"
 	# shellcheck disable=SC2154 # set by eval
-	add "$(echo "$name" | tr '[:upper:]' '[:lower:]')" "$(quote "$value")"
+	q=$(quote "$value" "HLTV_$name") || continue
+	add "$(echo "$name" | tr '[:upper:]' '[:lower:]')" "$q"
 done
 DEMO_DIR=cstrike/$(dirname "$HLTV_RECORD")
 DEMO_NAME=$(basename "$HLTV_RECORD")
@@ -137,7 +149,8 @@ wait $!
 while [ -z "$stopping" ]; do
 	repair_unfinished
 	echo "[hltv] starting on port $HLTV_PORT, commands:"
-	printf '%s' "$CMDS" | sed 's/^/[hltv]   /'
+	# Passwords (serverpassword, rconpassword, adminpassword, ...) masked in the log
+	printf '%s' "$CMDS" | sed 's/^\([a-z_]*password\) .*/\1 ****/; s/^/[hltv]   /'
 	# Queued in the FIFO, read once the console is up
 	printf '%s' "$CMDS" >&3
 	# In the background: a trapped signal only interrupts `wait`, not a running command
