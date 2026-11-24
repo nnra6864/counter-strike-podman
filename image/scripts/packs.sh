@@ -1387,17 +1387,26 @@ link_all() {
 }
 
 # Compiles plugin source $1 with the image's amxxpc and the pack's include dir $2, into the
-# cache (once for the same source, includes and amxxpc), and prints the .amxx
+# cache (once for the same source, includes and amxxpc), and prints the .amxx. A source
+# that didn't compile isn't tried again until something in the key changes
 compile() {
 	n=${1##*/}
 	n=${n%.*}
+	# The image's includes (AMXX's, ReAPI's) too: a new ReAPI changes them, not amxxpc
+	[ -n "${inc_key:-}" ] || inc_key=$(find "$AMXXPC/include" -type f -print0 | sort -z | xargs -0 -r cat | md5sum)
 	key=$({
 		md5sum <"$AMXXPC/amxxpc32.so"
+		printf '%s\n' "$inc_key"
 		cat "$1"
 		[ -d "$2" ] && find "$2" -type f -print0 | sort -z | xargs -0 -r cat
 	} | md5sum | cut -c 1-32)
 	o=$CACHE/amxx/$key/$n.amxx
 	[ -f "$o" ] && printf '%s\n' "$o" && return 0
+	failed=${o%.amxx}.failed
+	if [ -f "$failed" ]; then
+		say "$n.sma still doesn't compile (unchanged since it failed, the errors are in ${failed#"$LIB"/})"
+		return 1
+	fi
 	tmp=$(mktemp -d "$CACHE/.tmp.XXXXXX")
 	if (cd "$AMXXPC" && ./amxxpc "$1" -o"$tmp/$n.amxx" ${2:+-i"$2/"}) >"$tmp/log" 2>&1 && [ -f "$tmp/$n.amxx" ]; then
 		mkdir -p "${o%/*}"
@@ -1410,6 +1419,7 @@ compile() {
 	fi
 	say "$n.sma doesn't compile:"
 	grep -i 'error' "$tmp/log" | head -n 10 | sed 's/^/[packs]   /' >&2
+	mkdir -p "${o%/*}" && mv "$tmp/log" "$failed"
 	rm -rf "$tmp"
 	return 1
 }

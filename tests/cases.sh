@@ -78,6 +78,8 @@ case_plugins() {
 	link addons/amxmodx/plugins/foo.amxx && link addons/amxmodx/data/lang/foo.txt
 	file addons/amxmodx/configs/foo.cfg
 	logs "broken.sma doesn't compile"
+	packs || fail "packs.sh failed"
+	logs "broken.sma still doesn't compile (unchanged"
 }
 
 case_exclude_name() {
@@ -250,6 +252,18 @@ case_reload_env() {
 	env "$@" $H/cs.sh reload >$T/log 2>&1 || fail "cs reload failed"
 	diff -r --no-dereference $T/started $G >$T/diff || fail "not as it was after the start: $(head -n 5 $T/diff)"
 	rm -rf $T/started
+}
+
+case_demos() {
+	rm -rf $G && mkdir -p $G/demos && cd $H || return
+	# A finished demo has its directory offset (at 540) set, an unfinished one 0
+	demo() { head -c 540 /dev/zero >"$1" && printf "$2" >>"$1" && head -c 100 /dev/zero >>"$1"; }
+	demo $G/demos/hltv-1-de_a.dem '\001\000\000\000'
+	demo $G/demos/hltv-2-de_b.dem '\000\000\000\000'
+	echo hltv-0-gone.dem >$G/hltv_demos_done.txt
+	DELETE_EMPTY_DEMOS=0 ENABLE_VOICE_MKA=0 DEMOS_POLL=1 timeout 3 $H/demos.sh cstrike/demos hltv >$T/log 2>&1
+	has $G/hltv_demos_done.txt hltv-1-de_a.dem && hasnt $G/hltv_demos_done.txt hltv-2-de_b.dem
+	hasnt $G/hltv_demos_done.txt hltv-0-gone.dem
 }
 
 # ---------------------------------------------------------------------------------------

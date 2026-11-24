@@ -13,7 +13,8 @@
 # A demo is finished once HLTV has written its directory (the header's directory offset
 # isn't 0 any more): when recording stops, on map change, and on a clean stop. hltv.sh
 # repairs those a crash left unfinished before it starts HLTV. Each demo is handled once;
-# the names are kept in cstrike/hltv_demos_done.txt, outside the demo dir. A demo whose
+# the names are kept in cstrike/hltv_demos_done.txt, outside the demo dir (demos no longer
+# there leave it on the next start). A demo whose
 # player count can't be trusted (parts couldn't be read) is kept, and the log says why.
 
 DIR=$1
@@ -59,14 +60,23 @@ handle() {
 }
 
 touch "$DONE"
+# Names of demos that are gone (deleted, moved) can go from the list
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+ls "$DIR" >"$TMP/have" 2>/dev/null
+if [ -s "$DONE" ] && awk -v h="$TMP/have" 'FILENAME == h { have[$0] = 1; next } !($0 in have) { gone = 1; exit } END { exit !gone }' "$TMP/have" "$DONE"; then
+	awk -v h="$TMP/have" 'FILENAME == h { have[$0] = 1; next } $0 in have' "$TMP/have" "$DONE" >"$TMP/done"
+	cat "$TMP/done" >"$DONE"
+fi
 while :; do
-	# Names sort by date
-	for f in "$DIR/$NAME"-*.dem; do
-		[ -f "$f" ] || continue
-		grep -qxF "$(basename "$f")" "$DONE" && continue
-		finished "$f" || continue
+	# The ones not handled yet, in one go rather than a grep per demo. Names sort by date
+	ls "$DIR" 2>/dev/null | awk -v p="$NAME-" -v d="$DONE" 'FILENAME == d { done[$0] = 1; next }
+		index($0, p) == 1 && /\.dem$/ && !($0 in done)' "$DONE" - >"$TMP/new"
+	while IFS= read -r b; do
+		f=$DIR/$b
+		[ -f "$f" ] && finished "$f" || continue
 		handle "$f"
-		basename "$f" >> "$DONE"
-	done
+		printf '%s\n' "$b" >>"$DONE"
+	done <"$TMP/new"
 	sleep "$POLL"
 done

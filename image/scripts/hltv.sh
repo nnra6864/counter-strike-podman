@@ -65,7 +65,15 @@ if [ -n "$HLTV_RECORD" ]; then
 	[ "$RECORD_IDLE_STOP" = 0 ] && add record "$HLTV_RECORD"
 	# Finished demos: deleted if nobody joined, else a .mka of their voice
 	if on "${DELETE_EMPTY_DEMOS:-1}" || on "${ENABLE_VOICE_MKA:-1}"; then
-		/opt/hlds/demos.sh "$DEMO_DIR" "$DEMO_NAME" &
+		# Restarted if it dies, so demos don't quietly stop being handled
+		(
+			trap - TERM
+			while :; do
+				/opt/hlds/demos.sh "$DEMO_DIR" "$DEMO_NAME"
+				echo "[hltv] demos.sh exited ($?), restarting it in 30s"
+				sleep 30
+			done
+		) &
 	fi
 fi
 add connect "$HLTV_SERVER"
