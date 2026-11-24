@@ -1,6 +1,26 @@
 #!/bin/sh
 set -e
 
+# Everything the container prints also goes to /tmp/console.log, for `cs console` (the
+# reply to a command) and `cs log`: podman logs has only what journald still keeps. tee
+# ignores TERM and INT, so it outlives HLTV finishing its demo on stop
+LOG=/tmp/console.log
+rm -f "$LOG.in" && mkfifo "$LOG.in"
+(
+	trap '' TERM INT
+	exec tee -a "$LOG" <"$LOG.in"
+) &
+exec >"$LOG.in" 2>&1
+rm -f "$LOG.in"
+# Kept to its last 2 MB once it passes 8 MB. In place: tee appends, so it carries on at the end
+(
+	trap - TERM INT
+	while sleep 600; do
+		[ "$(stat -c %s "$LOG")" -gt 8000000 ] || continue
+		tail -c 2000000 "$LOG" >"$LOG.old" && cat "$LOG.old" >"$LOG" && rm -f "$LOG.old"
+	done
+) &
+
 # A new volume. Not just "empty": a mount inside it (cstrike/demos) makes it non-empty.
 # -n keeps anything already there
 if [ ! -e /opt/hlds/cstrike/liblist.gam ]; then

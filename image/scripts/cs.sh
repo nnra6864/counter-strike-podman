@@ -23,10 +23,11 @@
 #                        delete a pack from packs/, and its name and its maps' from the tags
 #                        file. Says what goes and asks first (podman exec -it), or -y.
 #                        -r: then reload, so this server drops it now
-#   console <command>    send a command to the server's console; its output is in the
-#                        container's logs (podman logs <container>)
+#   console <command>    send a command to the server's console, and print its reply
+#   log [-f] [lines]     the last lines the container printed (100), -f to follow
 
 FIFO=/tmp/server.in
+LOG=/tmp/console.log
 PACKS=/opt/hlds/packs.sh
 GAME=/opt/hlds/cstrike
 
@@ -38,7 +39,20 @@ console() {
 		echo "cs: the server isn't running ($FIFO is missing)" >&2
 		return 1
 	fi
+	from=$(stat -c %s "$LOG" 2>/dev/null) || from=
 	printf '%s\n' "$*" >"$FIFO"
+	[ -n "$from" ] || return 0
+	# The reply: what the log gets until it's quiet for half a second, 5 s at most
+	last=$from quiet=0 i=0
+	while [ $i -lt 50 ] && [ $quiet -lt 5 ]; do
+		sleep 0.1
+		now=$(stat -c %s "$LOG") || break
+		if [ "$now" = "$last" ]; then quiet=$((quiet + 1)); else quiet=0 last=$now; fi
+		i=$((i + 1))
+	done
+	# Trimmed meanwhile: then it's somewhere in the last part
+	[ "$last" -ge "$from" ] || from=0
+	tail -c +$((from + 1)) "$LOG" | head -c $((last - from)) | tr -d '\r'
 }
 
 # The packs, then the environment, as on a start: a new pack plugin gets its
@@ -185,6 +199,14 @@ remove) remove "$@" ;;
 console)
 	[ $# -gt 0 ] || { usage && exit 1; }
 	console "$@"
+	;;
+log)
+	[ -f "$LOG" ] || { echo "cs: no $LOG (the container started before it was kept)" >&2 && exit 1; }
+	follow=
+	[ "${1:-}" = -f ] && follow=1 && shift
+	case ${1:-100} in *[!0-9]*) usage && exit 1 ;; esac
+	if [ -n "$follow" ]; then exec tail -n "${1:-100}" -f "$LOG"; fi
+	tail -n "${1:-100}" "$LOG" | tr -d '\r'
 	;;
 help | -h | --help) usage ;;
 *)
