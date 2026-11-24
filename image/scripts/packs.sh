@@ -1,61 +1,24 @@
 #!/bin/sh
-# Packs: maps, AMX Mod X plugins, and anything else laid out like cstrike (models, sounds,
-# sprites, wads), each in its own dir or archive, linked into cstrike. Run by the entrypoint
-# on every start, and by hand after editing the list, while the server runs (new maps and
-# plugins work from the next map change):
+# Packs: maps, AMX Mod X plugins, and anything else laid out like cstrike, linked into it
+# from the library's packs/ by the packlist. What they are and how to use them (the
+# packlist, tags, saving, removing, FastDL, the variables): the README's Packs section.
+# Run by the entrypoint on every start and by cs.sh, which is how you run it:
 #
-#   podman exec <container> cs reload
-#   podman exec <container> cs save <download> [dir]      keep a download in packs/
-#   podman exec <container> cs tags                       every tag and what has it
-#   packs.sh tagnames | tag <name> <tag>...               for cs save -t and its picker
-#   packs.sh autotags <name> <path>                       the tags cs save starts with
-#   podman exec <container> cs remove <pack or map>       delete a pack, and it from the tags
+#   packs.sh                          link the packlist's packs (cs reload)
+#   packs.sh save <URL or download> [dir]    keep a download in packs/ (cs save)
+#   packs.sh tags                     every tag and what has it (cs tags)
+#   packs.sh tagnames                 the tags, for cs save's picker
+#   packs.sh autotags <name> <path>   the tags the autotags file gives a new pack
+#   packs.sh tag <name> <tag>...      add a name to tags (cs save -t)
+#   packs.sh remove [--dry] <pack or map>    delete a pack and its tags (cs remove)
 #
-# data/packlist (or PACKLIST in the environment, which wins) says which packs, in order;
-# the first one wins a file two packs have. One per line, # for comments:
-#   default        the maps CS ships with (kept in the image)
-#   mypack         packs/mypack in the library, yours: a dir laid out like cstrike, or an
-#                  archive (mypack.zip, .rar, .7z), a .bsp, .sma or .amxx
-#   maps/mypack    packs/maps/mypack: dirs that aren't packs just group them
-#   maps           every pack in packs/maps
-#   maps/de_*      the packs in it with these names
-#   mypack/de_*    only these maps from it (and its other files)
-#   fy_snow        a pack or a map by name, wherever it is in packs/ (fy_*: patterns)
-#   @snow          everything with this tag in the library's tags file (see Tags below)
-#   @snow+arena    everything with both
-#   -@xmas         leave out everything with this tag
-#   *              every pack in packs/
-#   -cs_*          leave these maps out, whichever pack has them, and packs by that name
-#   URL            downloaded into downloads/ once: a GameBanana page
-#                  (gamebanana.com/mods/<id>), or a direct link to a .zip, .rar, .7z, .bsp,
-#                  .sma or .amxx
-#   name=URL       the same, into downloads/name
-# A download no server lists any more is deleted. Your own packs never are.
-#
-# Archives in packs/ are unpacked into .cache/ in the library, and again when they change.
-# Where a pack came from: a URL in a zip's comment (zip -z), or in a .url file next to it.
-#
-# Plugins: a pack's addons/amxmodx/scripting/*.sma are compiled (with its include/), its
-# plugins linked, and added to amxmodx's plugins.ini, in packlist order, between "; packs:"
-# lines. AMXX_PLUGIN_<NAME>=0 still turns one off. Configs (addons/amxmodx/configs, any
-# .cfg or .ini) are copied once instead of linked, so each server can change its own.
-#
-# The library is where packs live: data/ (packs/, downloads/), or a dir mounted at
-# /opt/hlds/library, shared by several servers. In a shared library each server keeps the
-# downloads it uses in servers/<name>, so a download goes once no server lists it.
-#
-#   MAPCYCLE=1     the map cycle is every map from the packs, in packlist order
-#                  (cstrike/packs_mapcycle.txt). 0: mapcycle.txt
-#   FASTDL_URL=    http://host/<name>/: players download the packs' files from there
-#                  (sv_downloadurl). Writes fastdl/<name>/ in the library: links to exactly
-#                  the files this server uses, for a web server to serve. <name> also
-#                  names this server in a shared library
-#   SERVER_NAME=   names this server in a shared library, without FASTDL_URL
-#
-# A pack dir is laid out like cstrike: maps/de_x.bsp, gfx/env/, sound/, x.wad. Files that
-# are already in cstrike (not links) are never replaced, so cstrike/maps still works for
-# maps you'd rather not put in a pack. The links made are listed in
-# cstrike/packs_links.txt. A run changes only the links that differ from the last one's.
+# How it works, briefly: archives are unpacked into the library's .cache/ (by size and
+# time, and LAYOUT), plugins compiled there. The links wanted are worked out first
+# (lib/links.awk) and compared with what cstrike has, so only the difference changes and a
+# live server never misses a map. A file in cstrike that isn't one of our links is never
+# replaced. The links made are listed in cstrike/packs_links.txt. Commands that write take
+# the library's lock; tags, tagnames, autotags and remove --dry only read.
+# Parts: lib/fetch.sh (downloads), lib/*.awk (the tags file, links, plugins.ini).
 
 GAME=/opt/hlds/cstrike
 DATA=/opt/hlds/data
