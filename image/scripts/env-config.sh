@@ -27,7 +27,7 @@ run() {
 	shift 6
 	for f; do shift; [ -f "$f" ] && set -- "$@" "$f"; done
 	[ $# -gt 0 ] || return 0
-	rm -rf "$TMP"/*
+	rm -rf "${TMP:?}"/*
 	awk -v mode="$mode" -v prefix="$prefix" -v cc="$cc" -v ext="$ext" \
 		-v fallback="$fallback" -v availlist="$avail" -v tmpdir="$TMP" -v show="$SHOW" \
 		-f "$AWK_PROG" "$@"
@@ -35,7 +35,10 @@ run() {
 	i=1
 	for f in "$@"; do
 		# Write in place (not mv) to keep ownership, mode and SELinux labels
-		cmp -s "$TMP/$i" "$f" || cat "$TMP/$i" > "$f"
+		# awk ends every line with a newline: a file without one at its end is the same
+		if ! cmp -s "$TMP/$i" "$f" && ! { cat "$f" && echo; } | cmp -s "$TMP/$i" -; then
+			cat "$TMP/$i" > "$f"
+		fi
 		i=$((i + 1))
 	done
 }
