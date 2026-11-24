@@ -25,7 +25,7 @@
 #   @snow+arena    everything with both
 #   -@xmas         leave out everything with this tag
 #   *              every pack in packs/
-#   -cs_*          leave these maps out, whichever pack has them
+#   -cs_*          leave these maps out, whichever pack has them, and packs by that name
 #   URL            downloaded into downloads/ once: a GameBanana page
 #                  (gamebanana.com/mods/<id>), or a direct link to a .zip, .rar, .7z, .bsp,
 #                  .sma or .amxx
@@ -104,17 +104,39 @@ fi
 [ -n "$SERVER" ] || SERVER=${SERVER_NAME:-}
 case $SERVER in */* | .*) say "warning: $SERVER: not a usable server name" && SERVER= ;; esac
 
-mkdir -p "$DATA" "$PACKS" "$DOWNLOADS" "$CACHE"
+# Commands that only read the library: no lock, and nothing written into it (a library
+# that isn't mounted isn't started afresh in data/)
+READONLY=
+case ${1:-} in
+tags | tagnames | autotags) READONLY=1 ;;
+remove) [ "${2:-}" = --dry ] && READONLY=1 ;;
+esac
+if [ -n "$READONLY" ]; then
+	if [ ! -d "$PACKS" ]; then
+		say "no library: ${PACKS#/opt/hlds/} is missing (is it mounted?)"
+		exit 1
+	fi
+else
+	mkdir -p "$DATA" "$PACKS" "$DOWNLOADS" "$CACHE"
+fi
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-# One run at a time per library: several servers, or a start and `cs reload` at once
-if command -v flock >/dev/null; then
+# One run at a time per library: several servers, or a start and `cs reload` at once.
+# cs save takes it after its file is picked, so nobody waits on the picker
+lock() {
+	command -v flock >/dev/null || return 0
 	exec 9>"$LIB/.lock"
-	flock -w 1800 9 || say "warning: another run holds $LIB/.lock, going ahead anyway"
-fi
-rm -rf "$DOWNLOADS"/.tmp.* "$CACHE"/.tmp.*
+	if ! flock -w 1800 9; then
+		say "another run has held ${LIB#/opt/hlds/}/.lock for 30 minutes: giving up. If nothing"
+		say "  is running (podman exec <container> ps), delete the file"
+		exit 1
+	fi
+	# What a run that died left behind: nobody else is running now
+	rm -rf "$DOWNLOADS"/.tmp.* "$CACHE"/.tmp.*
+}
+[ -n "$READONLY" ] || [ "${1:-}" = save ] || lock
 
-if [ ! -f "$LIST" ]; then
+if [ -z "$READONLY" ] && [ ! -f "$LIST" ]; then
 	cat >"$LIST" <<-'EOF'
 	# The packs this server uses, in order: the first one wins a file two packs have.
 	# After editing: podman exec <container> cs reload   (new maps work from the next map change)
@@ -128,7 +150,7 @@ if [ ! -f "$LIST" ]; then
 	#   maps           every pack in packs/maps
 	#   mypack/de_*    only these maps from it
 	#   *              every pack in packs/
-	#   -cs_*          leave these maps out
+	#   -cs_*          leave these maps (or packs) out
 	#   https://gamebanana.com/mods/<id>, or a direct link to a .zip/.rar/.7z/.bsp/.sma/.amxx
 	#   name=https://...   the same, as downloads/name
 	#
@@ -362,7 +384,14 @@ fetch() {
 	dl_url=$url dl_md5='' title=''
 	case $url in
 	*://gamebanana.com/dl/* | *://www.gamebanana.com/dl/*) ;;
-	*://gamebanana.com/* | *://www.gamebanana.com/*) gamebanana "$url" || return 1 ;;
+	*://gamebanana.com/* | *://www.gamebanana.com/*)
+		# cs save resolves the page (and asks which file) before taking the lock
+		if [ "${gb_page:-}" = "$url" ]; then
+			dl_url=$gb_url dl_md5=$gb_md5 title=$gb_title
+		else
+			gamebanana "$url" || return 1
+		fi
+		;;
 	esac
 	say "downloading $url"
 	tmp=$(mktemp -d "$DOWNLOADS/.tmp.XXXXXX")
@@ -423,7 +452,7 @@ fetch() {
 # The list ------------------------------------------------------------------------------
 
 # entries: <pack dir> <tab> <maps filter, empty = all>. keep: downloads this server uses
-: >"$TMP/entries" && : >"$TMP/excludes" && : >"$TMP/xpacks" && : >"$TMP/keep" && : >"$TMP/fastdl" && : >"$TMP/plugins"
+: >"$TMP/entries" && : >"$TMP/excludes" && : >"$TMP/xnames" && : >"$TMP/xhit" && : >"$TMP/xpacks" && : >"$TMP/keep" && : >"$TMP/fastdl" && : >"$TMP/plugins"
 entry() { printf '%s\t%s\n' "$1" "$2" >>"$TMP/entries"; }
 
 # A file in packs/ that can be a pack
@@ -594,11 +623,12 @@ pack_maps() {
 	fi
 	l=$CACHE/index/${1#"$PACKS"/}.maps
 	if [ "$(head -n 1 "$l" 2>/dev/null)" != "$stamp" ]; then
+		# Written next to it and moved: read-only commands write it too, without the lock
 		mkdir -p "${l%/*}"
 		{
 			printf '%s\n' "$stamp"
 			LC_ALL=C.UTF-8 bsdtar -tf "$1" 2>/dev/null | sed -n 's|.*/||; s|\.[bB][sS][pP]$||p' | sort -u
-		} >"$l"
+		} >"$l.$$" && mv "$l.$$" "$l"
 	fi
 	tail -n +2 "$l"
 }
@@ -609,7 +639,10 @@ index() {
 }
 
 TAGS=$LIB/tags
-if [ ! -f "$TAGS" ]; then
+if [ -n "$READONLY" ] && [ ! -f "$TAGS" ]; then
+	: >"$TMP/notags"
+	TAGS=$TMP/notags
+elif [ ! -f "$TAGS" ]; then
 	cat >"$TAGS" <<-'EOF'
 	# Tags for the packs in packs/, for packlists to pick them by: @snow, @snow+competitive
 	# (both), -@xmas (leave those out). Names on a header's line or below it:
@@ -627,7 +660,10 @@ fi
 # The tags cs save starts with for a new pack, by its name and its maps' names. Only what
 # this file says is used: the list below is only what it's written with the first time
 AUTOTAGS=$LIB/autotags
-if [ ! -f "$AUTOTAGS" ]; then
+if [ -n "$READONLY" ] && [ ! -f "$AUTOTAGS" ]; then
+	: >"$TMP/noautotags"
+	AUTOTAGS=$TMP/noautotags
+elif [ ! -f "$AUTOTAGS" ]; then
 	cat >"$AUTOTAGS" <<-'EOF'
 	# The tags cs save picks for a pack to start with, which the picker shows ticked (and
 	# -t replaces). A pack gets a tag when its name or a map in it matches a pattern under
@@ -849,8 +885,18 @@ if [ "${1:-}" = save ]; then
 		exit 0
 	fi
 	if [ -z "$name" ]; then
+		case $url in
+		*://gamebanana.com/dl/* | *://www.gamebanana.com/dl/*) ;;
+		*://gamebanana.com/* | *://www.gamebanana.com/*)
+			SAVING=1 gamebanana "$url" || exit 1
+			gb_page=$url gb_url=$dl_url gb_md5=$dl_md5 gb_title=$title
+			;;
+		esac
+		lock
 		name=$(SAVING=1 fetch "$url" "") || exit 1
 		fetched=1
+	else
+		lock
 	fi
 	d=$DOWNLOADS/$name
 	group=${3:-}
@@ -1194,7 +1240,13 @@ while IFS= read -r t; do
 	[ -n "$t" ] || continue
 	case $t in
 	-@*) tags query "${t#-@}" | exclude_units ;;
-	-*) printf '%s\n' "${t#-}" >>"$TMP/excludes" ;;
+	-*)
+		# Maps by this name or pattern from any pack (the default one too), and packs by it:
+		# all their maps, or the whole pack when it has none
+		printf '%s\n' "${t#-}" >>"$TMP/excludes"
+		printf '%s\n' "${t#-}" >>"$TMP/xnames"
+		tags match "${t#-}" | exclude_units
+		;;
 	@*) tags query "${t#@}" | add_units ;;
 	'*') expand "$PACKS" '*' "" ;;
 	*://*)
@@ -1326,7 +1378,7 @@ in_filter() {
 excluded() {
 	while IFS= read -r g; do
 		# shellcheck disable=SC2254 # a pattern
-		case $1 in $g) return 0 ;; esac
+		case $1 in $g) printf '%s\n' "$g" >>"$TMP/xhit" && return 0 ;; esac
 	done <"$TMP/excludes"
 	return 1
 }
@@ -1508,6 +1560,12 @@ while IFS="$(printf '\t')" read -r pack filter; do
 done <"$TMP/entries"
 
 cat "$TMP/links" >"$LINKS"
+# -name lines that left nothing out: a typo, most likely
+while IFS= read -r g; do
+	grep -qxF -e "$g" "$TMP/xhit" && continue
+	tags match "$g" | grep -q . && continue
+	say "warning: -$g: no pack or map by that name"
+done <"$TMP/xnames"
 [ -z "$amxx_skipped" ] || say "warning: cstrike has no AMX Mod X (ENABLE_AMXMODX), the packs' plugins aren't used"
 
 # The packs' plugins in amxmodx's plugins.ini, between the "; packs:" lines, in packlist
