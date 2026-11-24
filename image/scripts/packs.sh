@@ -498,6 +498,8 @@ if [ "${1:-}" = save ]; then
 		*://gamebanana.com/dl/* | *://www.gamebanana.com/dl/*) ;;
 		*://gamebanana.com/* | *://www.gamebanana.com/*)
 			SAVING=1 gamebanana "$url" || exit 1
+			# Set by gamebanana(), used by fetch() (lib/fetch.sh) so it doesn't ask the API again
+			# shellcheck disable=SC2034,SC2154
 			gb_page=$url gb_url=$dl_url gb_md5=$dl_md5 gb_title=$title
 			;;
 		esac
@@ -930,6 +932,11 @@ compile() {
 # volume without an addons/amxmodx, which a link there would stop
 amxx_ok=
 [ -f "$PLUGINS_INI" ] && amxx_ok=1
+
+# A pack the packlist picks more than once (by name and by tags, say) counts once: the
+# first time it's picked whole, or each different set of maps until then
+awk -F '\t' '($1 in whole) || seen[$0]++ { next } { if ($2 == "") whole[$1] = 1; print }' \
+	"$TMP/entries" >"$TMP/entries1" && mv "$TMP/entries1" "$TMP/entries"
 
 # Each pack in packlist order: packinfo <n> <dir> <maps filter> <label> <left out>,
 # allfiles <n> <path in cstrike> <file> (plugins compiled from source first: they win over

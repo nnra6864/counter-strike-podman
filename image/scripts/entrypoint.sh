@@ -70,6 +70,9 @@ if [ -n "$map" ] && [ ! -e "/opt/hlds/cstrike/maps/$map.bsp" ]; then
 		map=$first
 	fi
 fi
+# The map cycle from the packs (settings.sh) from the start too: env-config.sh puts it in
+# amxx.cfg, which runs after the plugins start, and nextmap.amxx reads it as it starts
+if [ -n "${CVAR_MAPCYCLEFILE:-}" ]; then set -- "$@" +mapcyclefile "$CVAR_MAPCYCLEFILE"; fi
 if [ -n "$maxplayers" ]; then set -- "$@" +maxplayers "$maxplayers"; fi
 if [ -n "$map" ]; then set -- "$@" +map "$map"; fi
 

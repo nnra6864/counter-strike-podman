@@ -115,6 +115,12 @@ case_packlist() {
 	packlist '@nosuch'
 	packs
 	logs "no tag nosuch"
+	# Picked by name and by two tags: one pack
+	tagsfile '[tag.snow] fy_b' '[tag.xmas] fy_b'
+	packlist fy_b @snow @xmas
+	packs || fail "packs.sh failed"
+	[ "$(grep -c 'fy_b' $T/log)" = 1 ] || fail "fy_b counted more than once"
+	logs "1 packs: 1 maps"
 }
 
 case_first_wins() {
