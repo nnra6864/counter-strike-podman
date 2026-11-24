@@ -247,17 +247,24 @@ knife_round
 - `@tag` in a tag is everything with that other tag.
 
 In the packlist, `@snow` is everything tagged snow, `@snow+competitive` everything with both, `-@xmas` leaves them out. Tags name what's in `packs/`; for a download, `cs save` it first.
-The first start writes a `tags` file with only comments. To see every tag and what has it, and warnings for names that match nothing:
+The first start writes a `tags` file with only comments. To see every tag and what has it, and warnings for names that match nothing and for files in `packs/` that aren't packs:
 
 ```sh
 podman exec counter-strike cs tags
 ```
 
+```
+snow (3):
+  de_dust2_winter16  de_dust2_xmas (maps/de_dust2_xmas_2)  fy_snow
+```
+
+A map's pack is shown when it's named otherwise.
+
 #### Plugins
 
 A pack's AMX Mod X plugins go in with it:
 
-- Its `addons/amxmodx/scripting/*.sma` are compiled with the image's `amxxpc` (and its `scripting/include/`), once for the same source. A plugin that doesn't compile is left out, with the errors in the log. A compiled `.amxx` in the pack is used as it is, unless there's source for it.
+- Its `addons/amxmodx/scripting/*.sma` are compiled with the image's `amxxpc` (and its `scripting/include/`), once for the same source. A plugin that doesn't compile is left out, with the errors in the log, and isn't tried again until it (or the image) changes. A compiled `.amxx` in the pack is used as it is, unless there's source for it.
 - They're added to `addons/amxmodx/configs/plugins.ini` between `; packs:` lines, in packlist order, and taken out when the packlist drops them. A plugin `plugins.ini` already lists elsewhere stays where it is.
 - `AMXX_PLUGIN_<NAME>: "0"` still turns one off (or `debug`, see [Environment variables](#environment-variables)).
 - Configs (anything in `addons/amxmodx/configs/`, any `.cfg` or `.ini`) are copied, not linked, and only when `cstrike` doesn't have them yet: each server keeps its own, and `CVAR_` settings never write into the library.

@@ -387,7 +387,8 @@ fetch() {
 	esac
 	say "downloading $url"
 	tmp=$(mktemp -d "$DOWNLOADS/.tmp.XXXXXX")
-	got=$(curl -fsSL -S --retry 2 -m 900 -o "$tmp/download" -D "$tmp/headers" -w '%{url_effective}' "$dl_url" 2>"$TMP/err") || {
+	# 2 GB at most: the URLs are yours, but an uploader can replace a file
+	got=$(curl -fsSL -S --retry 2 -m 900 --max-filesize 2147483648 -o "$tmp/download" -D "$tmp/headers" -w '%{url_effective}' "$dl_url" 2>"$TMP/err") || {
 		say "$url: download failed: $(cat "$TMP/err")"
 		rm -rf "$tmp"
 		return 1
@@ -450,7 +451,8 @@ entry() { printf '%s\t%s\n' "$1" "$2" >>"$TMP/entries"; }
 # A file in packs/ that can be a pack
 is_pack_file() {
 	[ -f "$1" ] || return 1
-	case " $PACKFILES " in *" $(lower "${1##*.}") "*) return 0 ;; esac
+	# PACKFILES, any case, without a fork: it runs for every entry in packs/
+	case $1 in *.[zZ][iI][pP] | *.[rR][aA][rR] | *.7[zZ] | *.[bB][sS][pP] | *.[sS][mM][aA] | *.[aA][mM][xX][xX]) return 0 ;; esac
 	return 1
 }
 # A dir laid out like cstrike. Other dirs in packs/ only group packs
@@ -470,10 +472,25 @@ pack_file() {
 	return 1
 }
 
+# A zip's comment, kept in the cache by the file's size and time: cs save looks at every
+# pack's
+zip_comment() {
+	stamp=$(stat -c '%s %Y' "$1")
+	l=$CACHE/index/${1#"$PACKS"/}.comment
+	if [ "$(head -n 1 "$l" 2>/dev/null)" != "$stamp" ]; then
+		mkdir -p "${l%/*}"
+		{
+			printf '%s\n' "$stamp"
+			unzip -qz "$1" 2>/dev/null
+		} >"$l.$$" && mv "$l.$$" "$l"
+	fi
+	tail -n +2 "$l"
+}
+
 # Where a pack came from: a URL in a zip's comment, or in a .url file next to it
 origin() {
 	{
-		case $(lower "$1") in *.zip) unzip -qz "$1" 2>/dev/null ;; esac
+		case $1 in *.[zZ][iI][pP]) zip_comment "$1" ;; esac
 		for u in "${1%.*}.url" "$1.url"; do
 			[ -f "$u" ] && cat "$u"
 		done
@@ -614,12 +631,22 @@ pack_maps() {
 		return 0
 	fi
 	l=$CACHE/index/${1#"$PACKS"/}.maps
+	# 2: with the maps of archives in it
+	stamp="$stamp 2"
 	if [ "$(head -n 1 "$l" 2>/dev/null)" != "$stamp" ]; then
 		# Written next to it and moved: read-only commands write it too, without the lock
 		mkdir -p "${l%/*}"
+		LC_ALL=C.UTF-8 bsdtar -tf "$1" >"$TMP/list" 2>/dev/null
+		# No maps, but archives in it: what unpack would open, theirs
+		if ! grep -qi '\.bsp$' "$TMP/list"; then
+			grep -i '\.\(zip\|rar\|7z\)$' "$TMP/list" | while IFS= read -r a; do
+				LC_ALL=C.UTF-8 bsdtar -xOf "$1" "$a" >"$TMP/inner" 2>/dev/null &&
+					LC_ALL=C.UTF-8 bsdtar -tf "$TMP/inner" 2>/dev/null
+			done >>"$TMP/list"
+		fi
 		{
 			printf '%s\n' "$stamp"
-			LC_ALL=C.UTF-8 bsdtar -tf "$1" 2>/dev/null | sed -n 's|.*/||; s|\.[bB][sS][pP]$||p' | sort -u
+			sed -n 's|.*/||; s|\.[bB][sS][pP]$||p' "$TMP/list" | sort -u
 		} >"$l.$$" && mv "$l.$$" "$l"
 	fi
 	tail -n +2 "$l"
@@ -712,7 +739,8 @@ tags() {
 		return r "$"
 	}
 	function matches(m, j,    re) {
-		re = glob2re(tolower(m))
+		if (!(m in RE)) RE[m] = glob2re(tolower(m))
+		re = RE[m]
 		return tolower(iname[j]) ~ re || tolower(imap[j]) ~ re || tolower(irel[j]) ~ re
 	}
 	function add(t, m) {
@@ -788,9 +816,21 @@ tags() {
 			for (x = 1; x <= nt; x++) {
 				t = torder[x]
 				set_of(t)
-				line = ""
-				for (j = 1; j <= n; j++) if ((t, j) in S) line = line " " (imap[j] != "" ? imap[j] : iname[j]) " (" irel[j] ")"
-				print t ":" (line == "" ? " nothing" : line)
+				# Each name once, with the pack it is in when that is named otherwise, wrapped
+				k = 0
+				line = "  "
+				for (j = 1; j <= n; j++) {
+					if (!((t, j) in S)) continue
+					w = imap[j] != "" ? imap[j] : iname[j]
+					b = irel[j]
+					sub(/.*\//, "", b)
+					if (b != w) w = w " (" irel[j] ")"
+					k++
+					if (length(line) > 2 && length(line) + length(w) + 2 > 88) { body = body line "\n"; line = "  " }
+					line = line (length(line) > 2 ? "  " : "") w
+				}
+				print t " (" k "):" (k ? "\n" body line : " nothing")
+				body = ""
 			}
 		}
 	}' "$INDEX" "$TAGS"
@@ -967,6 +1007,17 @@ fi
 # packs tags: every tag and what has it
 if [ "${1:-}" = tags ]; then
 	tags check
+	# Files in packs/ that are no pack, in none, and no .url: a tags file left from an older
+	# layout, an extension packs doesn't know
+	index
+	find "$PACKS" -type f ! -name '.*' ! -iname '*.url' | awk -v idx="$INDEX" -v packs="$PACKS" '
+		FILENAME == idx { split($0, f, "\t"); P[f[4]] = 1; next }
+		{
+			if ($0 in P) next
+			d = $0
+			while (sub(/\/[^\/]*$/, "", d) && d != packs) if (d in P) next
+			print "[packs] warning: " substr($0, length(packs) - 4) ": not a pack (" ext ") or in one, not used" > "/dev/stderr"
+		}' ext="$PACKFILES, or a dir laid out like cstrike" "$INDEX" -
 	tags list
 	exit 0
 fi
@@ -1272,7 +1323,7 @@ while IFS= read -r t; do
 			if [ -s "$TMP/match" ]; then
 				add_units <"$TMP/match"
 			else
-				if tags list 2>/dev/null | grep -qi "^$t:"; then
+				if tags list 2>/dev/null | awk -v t="$(lower "$t") (" 'index(tolower($0), t) == 1 { f = 1 } END { exit !f }'; then
 					say "warning: $t: no pack or map by that name in packs/; the tag is @$t"
 				else
 					say "warning: $t: no pack or map by that name in packs/"
@@ -1319,9 +1370,9 @@ if [ -d "$CACHE/packs" ]; then
 	find "$CACHE/packs" -mindepth 1 -type d -empty -delete
 fi
 if [ -d "$CACHE/index" ]; then
-	find "$CACHE/index" -type f -name '*.maps' | while IFS= read -r l; do
+	find "$CACHE/index" -type f \( -name '*.maps' -o -name '*.comment' \) | while IFS= read -r l; do
 		r=${l#"$CACHE"/index/}
-		[ -f "$PACKS/${r%.maps}" ] || rm -f "$l"
+		[ -f "$PACKS/${r%.*}" ] || rm -f "$l"
 	done
 	find "$CACHE/index" -mindepth 1 -type d -empty -delete
 fi

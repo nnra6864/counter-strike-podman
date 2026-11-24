@@ -47,9 +47,9 @@ run() {
 # source tree are skipped. Settings found nowhere are appended to amxx.cfg,
 # which AMXX executes after server.cfg, so they win.
 AMXX_CFG=addons/amxmodx/configs/amxx.cfg
-CFGS=$(find . -name '*.cfg' \
-	! -path './addons/amxmodx/scripting/*' \
-	! -name config.cfg ! -name listenserver.cfg ! -name userconfig.cfg \
+CFGS=$(find . \( -path ./demos -o -path ./logs -o -path ./addons/amxmodx/scripting \) -prune -o \
+	-name '*.cfg' \
+	! -name config.cfg ! -name listenserver.cfg ! -name userconfig.cfg -print \
 	| sed 's|^\./||' | sort)
 FALLBACK=server.cfg
 [ -f "$AMXX_CFG" ] && FALLBACK=$AMXX_CFG

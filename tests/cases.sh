@@ -200,6 +200,21 @@ case_readonly() {
 	[ ! -e $D/tags ] && [ ! -e $D/packlist ] || fail "packs.sh tags wrote files"
 }
 
+case_index() {
+	fresh
+	mkdir -p $D/packs/maps $D/packs/old
+	# Maps in a zip in a zip are indexed without unpacking
+	bsp $FX/inner/fy_b.bsp && mkdir -p $FX/b && zipdir $FX/b/inner.zip $FX/inner && zipdir $D/packs/maps/nest.zip $FX/b
+	bsp $D/packs/old/maps/de_o.bsp && echo x >$D/packs/old/notes.txt
+	echo '[tag.x] fy_b' >$D/packs/tags
+	echo https://example.com >$D/packs/maps/nest.url
+	tagsfile '[tag.snow] fy_b'
+	packs tags || fail "packs.sh tags failed"
+	grep -q '^  fy_b (maps/nest)$' $T/out || fail "fy_b in nest.zip not found: $(cat $T/out)"
+	logs "packs/tags: not a pack"
+	nologs "notes.txt" && nologs "nest.url"
+}
+
 case_save_tag_remove() {
 	fresh
 	bsp $FX/s/maps/de_s.bsp && zipdir $FX/de_s.zip $FX/s
