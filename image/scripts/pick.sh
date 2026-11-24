@@ -1,18 +1,51 @@
 #!/bin/bash
-# cs save's one-of-many picker: pick.sh <title> <start> lists the rows on stdin, the
-# cursor on row <start> (from 0), and prints the number of the one picked (from 0).
-# Needs a terminal (podman exec -it); draws on /dev/tty, so its output can be captured.
+# cs save's pickers. Need a terminal (podman exec -it); they draw on /dev/tty, so their
+# output can be captured.
+#
+#   pick.sh <title> <start>
+#       one of the rows on stdin, the cursor on row <start> (from 0): prints the number of
+#       the one picked (from 0)
+#   pick.sh --multi [-p 'item...'] <title> [item...]
+#       any of the items, those after -p picked to start with, and new ones typed into a
+#       slot at the bottom (spaces or commas between): prints them, one per line, new ones
+#       in lowercase
 #
 #   up/down, ctrl-k/ctrl-j   move
-#   enter                    pick
+#   space or tab             (--multi) pick or unpick the item under the cursor
+#   letters, backspace       (--multi) type in the slot
+#   enter                    done
 #   esc, ctrl-c              none (exits 1)
 
-title=$1 cur=$2
-mapfile -t rows
+multi='' picked=''
+if [[ ${1:-} == --multi ]]; then
+	multi=1
+	shift
+	if [[ ${1:-} == -p ]]; then
+		picked=" $2 "
+		shift 2
+	fi
+	title=$1
+	shift
+	rows=("$@")
+	cur=0
+else
+	title=$1 cur=$2
+	mapfile -t rows
+fi
 n=${#rows[@]}
-((n > 0)) || exit 1
-[[ $cur =~ ^[0-9]+$ ]] && ((cur < n)) || cur=0
-top=0 drawn=0
+declare -A on=()
+if [[ -n $multi ]]; then
+	for ((i = 0; i < n; i++)); do
+		[[ $picked == *" ${rows[$i]} "* ]] && on[$i]=1
+	done
+else
+	((n > 0)) || exit 1
+	[[ $cur =~ ^[0-9]+$ ]] && ((cur < n)) || cur=0
+fi
+# The last place the cursor can go: the slot, after the items
+last=$((n - 1))
+[[ -n $multi ]] && last=$n
+top=0 input='' drawn=0
 
 exec 3<>/dev/tty || exit 1
 old=$(stty -g <&3) || exit 1
@@ -24,33 +57,50 @@ printf '\e[?25l' >&3
 
 size=$(stty size <&3)
 lines=${size%% *} cols=${size##* }
-[[ $lines =~ ^[0-9]+$ ]] || lines=24
-[[ $cols =~ ^[0-9]+$ ]] || cols=80
-view=$((lines - 3))
+# A terminal that doesn't know its size says 0 (a fresh pty can)
+[[ $lines =~ ^[0-9]+$ ]] && ((lines >= 5)) || lines=24
+[[ $cols =~ ^[0-9]+$ ]] && ((cols >= 20)) || cols=80
+# Room for the title and the help line, and the slot
+view=$((lines - 3 - ${multi:-0}))
 ((view < 3)) && view=3
 ((view > n)) && view=$n
 
 draw() {
 	local i row
 	((drawn)) && printf '\e[%dA' "$drawn" >&3
-	((cur < top)) && top=$cur
-	((cur >= top + view)) && top=$((cur - view + 1))
+	if ((cur >= 0 && cur < n)); then
+		((cur < top)) && top=$cur
+		((cur >= top + view)) && top=$((cur - view + 1))
+	fi
 	{
 		printf '\r\e[K\e[1m%s\e[0m' "$title"
 		((view < n)) && printf ' (%d-%d of %d)' $((top + 1)) $((top + view)) "$n"
 		printf '\n'
 		for ((i = top; i < top + view; i++)); do
+			row=${rows[$i]}
+			if [[ -n $multi ]]; then
+				if ((${on[$i]:-0})); then row="[x] $row"; else row="[ ] $row"; fi
+			fi
 			# One line each: long ones are cut to the terminal's width
-			row=${rows[$i]:0:$((cols - 3))}
+			row=${row:0:$((cols - 3))}
 			if ((i == cur)); then
 				printf '\r\e[K> \e[7m%s\e[0m\n' "$row"
 			else
 				printf '\r\e[K  %s\n' "$row"
 			fi
 		done
-		printf '\r\e[K\e[2mctrl-j/k: move, enter: pick, esc: none\e[0m\n'
+		if [[ -n $multi ]]; then
+			if ((cur == n)); then
+				printf '\r\e[K> new: %s\e[7m \e[0m\n' "$input"
+			else
+				printf '\r\e[K  new: %s\n' "$input"
+			fi
+			printf '\r\e[K\e[2mctrl-j/k: move, space/tab: pick, type: new ones, enter: done, esc: none\e[0m\n'
+		else
+			printf '\r\e[K\e[2mctrl-j/k: move, enter: pick, esc: none\e[0m\n'
+		fi
 	} >&3
-	drawn=$((view + 2))
+	drawn=$((view + 2 + ${multi:-0}))
 }
 
 # A key as hex bytes. dd, not read -n: bash's read turns the terminal's CR-to-NL back on,
@@ -69,13 +119,39 @@ while :; do
 		stty min 1 time 0 <&3
 		case $rest in
 		5b41 | 4f41) ((cur > 0)) && cur=$((cur - 1)) ;;
-		5b42 | 4f42) ((cur < n - 1)) && cur=$((cur + 1)) ;;
+		5b42 | 4f42) ((cur < last)) && cur=$((cur + 1)) ;;
 		'') exit 1 ;;
 		esac
 		;;
 	0d) break ;;
-	0a) ((cur < n - 1)) && cur=$((cur + 1)) ;;
+	0a) ((cur < last)) && cur=$((cur + 1)) ;;
 	0b) ((cur > 0)) && cur=$((cur - 1)) ;;
+	*) [[ -n $multi ]] || continue ;;&
+	20 | 09)
+		if ((cur < n)); then
+			on[$cur]=$((!${on[$cur]:-0}))
+		elif [[ $k == 20 ]]; then
+			input+=' '
+		fi
+		;;
+	7f | 08) ((cur == n)) && input=${input%?} ;;
+	3[0-9] | [46][1-9a-f] | [57][0-9a] | 5f | 2c | 2d)
+		cur=$n
+		input+=$(printf %b "\\x$k")
+		;;
 	esac
 done
-echo "$cur"
+
+if [[ -z $multi ]]; then
+	echo "$cur"
+	exit 0
+fi
+# Drawn once more without the cursor, as it was left
+cur=-1
+draw
+{
+	for ((i = 0; i < n; i++)); do
+		((${on[$i]:-0})) && printf '%s\n' "${rows[$i]}"
+	done
+	printf '%s\n' "$input" | tr ', ' '\n' | tr '[:upper:]' '[:lower:]'
+} | awk 'NF && !seen[$0]++'

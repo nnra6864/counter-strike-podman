@@ -102,7 +102,7 @@ save() {
 		auto=$("$PACKS" autotags "$name" "$rel" | tr '\n' ' ')
 		if [ -t 0 ] && [ -t 2 ]; then
 			# shellcheck disable=SC2046 # one tag per word
-			tags=$(/opt/hlds/tagpick.sh -p "$auto" "$name" $({
+			tags=$(/opt/hlds/pick.sh --multi -p "$auto" "Tags for $name" $({
 				"$PACKS" tagnames
 				[ -z "$auto" ] || printf '%s\n' $auto
 			} | sort -u)) || tags=
