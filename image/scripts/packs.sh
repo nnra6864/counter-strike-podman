@@ -1017,7 +1017,7 @@ for c in $CONTENT; do [ -d "$c" ] && dirs="$dirs $c"; done
 # plugins, maps (the cycle), fastdl (<file> <path>) and xhit (-name patterns that hit)
 : >"$TMP/links" && : >"$TMP/ln" && : >"$TMP/rm" && : >"$TMP/copy" && : >"$TMP/maps"
 awk -F '\t' -v T="$TMP" -v data="$DATA" -v shared="$SHARED" -v amxx_ok="$amxx_ok" \
-	-v content=" $CONTENT " -v default="$DEFAULT" -f "$LIBDIR/links.awk" "$TMP/oldlinks" "$TMP/scan" "$TMP/excludes" "$TMP/packinfo" "$TMP/cycles" "$TMP/allfiles"
+	-v content=" $CONTENT " -v default="$DEFAULT" -v verbose="${PACKS_VERBOSE:-}" -f "$LIBDIR/links.awk" "$TMP/oldlinks" "$TMP/scan" "$TMP/excludes" "$TMP/packinfo" "$TMP/cycles" "$TMP/allfiles"
 
 # Only the difference: links that go, configs copied, links made or changed (ln -f swaps a
 # link that pointed elsewhere)

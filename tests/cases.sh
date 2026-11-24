@@ -33,7 +33,7 @@ fresh() {
 }
 packlist() { printf '%s\n' "$@" >$D/packlist; }
 tagsfile() { printf '%s\n' "$@" >$D/tags; }
-packs() { $H/packs.sh "$@" >$T/out 2>$T/log; }
+packs() { PACKS_VERBOSE=1 $H/packs.sh "$@" >$T/out 2>$T/log; }
 # A map: a BSP version 30 header and some bytes
 bsp() {
 	mkdir -p "${1%/*}"
@@ -62,6 +62,8 @@ case_maps() {
 	link maps/de_dust2.bsp
 	has $G/packs_mapcycle.txt de_a && has $G/packs_mapcycle.txt fy_b && has $G/packs_mapcycle.txt de_dust2
 	has $G/packs_links.txt maps/de_a.bsp
+	$H/packs.sh 2>$T/log
+	logs "[packs] 5 packs: 29 maps" && nologs "default: 25 maps"
 }
 
 case_plugins() {

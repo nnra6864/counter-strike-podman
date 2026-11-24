@@ -106,7 +106,9 @@ function dopack(i,    k, all, wanted, linked, maps, kept, out, dup, plugins, cop
 	if (out) msg = msg ", " out " maps left out"
 	if (dup) msg = msg ", " dup " already from a pack before it"
 	if (kept) msg = msg ", " kept " already in cstrike (kept those)"
-	say(msg)
+	# A line per pack with -v, or when something about it is worth knowing
+	if (verbose || kept || out) say(msg)
+	npacks++; tmaps += maps; tfiles += linked; tplugins += plugins
 }
 
 FILENAME == T "/oldlinks" { ours[$0] = 1; next }
@@ -136,5 +138,6 @@ END {
 	}
 	for (g in hit) print g > (T "/xhit")
 	if (amxx_skipped) say("warning: cstrike has no AMX Mod X (ENABLE_AMXMODX), the packs' plugins aren't used")
+	say(npacks + 0 " packs: " tmaps + 0 " maps, " tfiles + 0 " files, " tplugins + 0 " plugins" (verbose ? "" : " (cs reload -v: each pack)"))
 	if (made || gone) say("links: " made + 0 " made, " gone + 0 " taken down, " same + 0 " as they were")
 }

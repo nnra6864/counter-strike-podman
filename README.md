@@ -528,6 +528,7 @@ podman exec counter-strike cs <command>
 |---|---|
 | `reload` | link the packs again after editing `data/packlist` or the tags file: maps, plugins, FastDL, the map cycle, then apply the environment to the configs again. New plugins load with the next map, see [Packs](#packs) |
 | `reload --now` | the same, then restart the current map so they load now (players reconnect) |
+| `reload -v` | the same, with a line for each pack (without it, a summary, and lines only for packs with maps left out or files kept) |
 | `tags` | every tag and what has it, and names in the tags file that match nothing, see [Tags](#tags) |
 | `save [-r] [-t tags] <URL> [dir]` | download a map or plugin into `packs/`, as a zip with its URL, see [Where a pack came from](#where-a-pack-came-from). `save` alone lists the packlists' downloads, which can be saved by name. `-t snow,xmas` tags it (with `podman exec -it`, a picker instead), `-r` reloads after, see [Saving with tags](#saving-with-tags-and-a-reload) |
 | `remove [-r] [-y] <pack or map>` | delete a pack from `packs/` and take it out of the tags file, after asking, see [Removing a pack](#removing-a-pack) |

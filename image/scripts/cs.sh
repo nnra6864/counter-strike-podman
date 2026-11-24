@@ -3,10 +3,11 @@
 #
 #   podman exec <container> cs <command>
 #
-#   reload [--now]       link the packs again after editing data/packlist or the tags file:
+#   reload [--now] [-v]  link the packs again after editing data/packlist or the tags file:
 #                        maps, plugins, FastDL, the map cycle, and apply the environment to
 #                        the configs again. New maps and plugins work from the next map
-#                        change; --now restarts the current map for that
+#                        change; --now restarts the current map for that. -v: a line
+#                        for each pack
 #   tags                 every tag in the tags file and what has it, and names that match
 #                        nothing
 #   save [-r] [-t tags] <URL> [dir]
@@ -184,11 +185,13 @@ cmd=${1:-help}
 case $cmd in
 reload)
 	now=
-	case ${1:-} in
-	--now) now=1 ;;
-	'') ;;
-	*) usage && exit 1 ;;
-	esac
+	for a; do
+		case $a in
+		--now) now=1 ;;
+		-v) export PACKS_VERBOSE=1 ;;
+		*) usage && exit 1 ;;
+		esac
+	done
 	reload_all || exit
 	if [ -n "$now" ]; then
 		echo "[cs] restarting the map" >&2
