@@ -251,7 +251,7 @@ knife_round
 ```
 
 - `[tag.X]` lists what has tag X. `[map.X]` lists the tags X has; `[plugin.X]` and `[pack.X]` are the same, for reading.
-- The names go on the header's line or below it, as many per line as you like, up to the next header. `#` for comments.
+- A header starts its line. The names go on the header's line or below it, as many per line as you like, up to the next header. `#` for comments.
 - The same header can come more than once, and they add up.
 - A name is a pack (its file or dir name, wherever it is in `packs/`), a map in one, or a pack's path (`maps/fy_snow`). Patterns work.
 - `@tag` in a tag is everything with that other tag.
