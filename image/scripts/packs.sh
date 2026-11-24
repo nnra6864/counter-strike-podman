@@ -71,6 +71,8 @@ PACKFILES="zip rar 7z bsp sma amxx"
 LAYOUT=2
 AMXXPC=/opt/hlds/cstrike_defaults/addons/amxmodx/scripting
 PLUGINS_INI=$GAME/addons/amxmodx/configs/plugins.ini
+# The awk programs
+AWK=/opt/hlds/lib
 
 say() { echo "[packs] $*" >&2; }
 . /opt/hlds/common.sh
@@ -728,119 +730,7 @@ fi
 # list: every tag and what has it
 tags() {
 	index
-	awk -v mode="$1" -v q="${2:-}" -v indexf="$INDEX" '
-	function warn(m) { print "[packs] " m > "/dev/stderr" }
-	# Mistakes in the file: once, by check
-	function bad(m) { if (mode == "check") warn(m) }
-	function glob2re(g,    r, i, j, c, n) {
-		r = "^"
-		n = length(g)
-		for (i = 1; i <= n; i++) {
-			c = substr(g, i, 1)
-			if (c == "*") r = r ".*"
-			else if (c == "?") r = r "."
-			else if (c == "[" && (j = index(substr(g, i + 1), "]")) > 0) { r = r substr(g, i, j + 1); i += j }
-			else if (index(".+^$(){}|\\[]", c)) r = r "\\" c
-			else r = r c
-		}
-		return r "$"
-	}
-	function matches(m, j,    re) {
-		if (!(m in RE)) RE[m] = glob2re(tolower(m))
-		re = RE[m]
-		return tolower(iname[j]) ~ re || tolower(imap[j]) ~ re || tolower(irel[j]) ~ re
-	}
-	function add(t, m) {
-		t = tolower(t)
-		sub(/^@/, "", t)
-		known[t] = 1
-		if (!(t in seen)) { seen[t] = 1; torder[++nt] = t }
-		mem[t, ++nmem[t]] = m
-		where[t, nmem[t]] = hdr
-	}
-	function set_of(t,    i, j, m, u) {
-		if (t in done) return
-		done[t] = 1
-		for (i = 1; i <= nmem[t]; i++) {
-			m = mem[t, i]
-			if (m ~ /^@/) {
-				u = tolower(substr(m, 2))
-				set_of(u)
-				for (j = 1; j <= n; j++) if ((u, j) in S) S[t, j] = 1
-			} else
-				for (j = 1; j <= n; j++) if (matches(m, j)) S[t, j] = 1
-		}
-	}
-	FILENAME == indexf { n++; split($0, f, "\t"); irel[n] = f[1]; iname[n] = f[2]; imap[n] = f[3]; ipath[n] = f[4]; next }
-	{ sub(/#.*/, "") }
-	{
-		for (i = 1; i <= NF; i++) {
-			w = $i
-			if (w ~ /^\[.*\]$/) {
-				h = tolower(substr(w, 2, length(w) - 2))
-				k = h
-				sub(/\..*$/, "", k)
-				key = substr(h, length(k) + 2)
-				hdr = w
-				if (key == "") hm = "bad"
-				else if (k == "tag") hm = "tag"
-				else if (k == "map" || k == "plugin" || k == "pack") hm = "item"
-				else hm = "bad"
-				if (hm == "bad") bad("tags: " w ": not a header like [tag.snow] or [map.fy_snow], skipping what is under it")
-				continue
-			}
-			if (hm == "tag") add(key, w)
-			else if (hm == "item") add(w, key)
-			else if (hm == "" && !toplevel++) bad("tags: " w ": before any header, skipped")
-		}
-	}
-	END {
-		if (mode == "query") {
-			np = split(tolower(q), parts, "+")
-			for (p = 1; p <= np; p++) {
-				if (!(parts[p] in known)) { warn("@" q ": no tag " parts[p] " in the tags file"); exit }
-				set_of(parts[p])
-			}
-			for (j = 1; j <= n; j++) {
-				all = 1
-				for (p = 1; p <= np; p++) if (!((parts[p], j) in S)) { all = 0; break }
-				if (all) print ipath[j] "\t" imap[j]
-			}
-		} else if (mode == "match") {
-			for (j = 1; j <= n; j++) if (matches(q, j)) print ipath[j] "\t" imap[j]
-		} else if (mode == "check") {
-			for (t in nmem) for (i = 1; i <= nmem[t]; i++) {
-				m = mem[t, i]
-				if (m ~ /^@/) {
-					if (!(tolower(substr(m, 2)) in known)) warn("tags: " where[t, i] ": " m ": no such tag")
-					continue
-				}
-				hit = 0
-				for (j = 1; j <= n; j++) if (matches(m, j)) { hit = 1; break }
-				if (!hit) warn("tags: " where[t, i] ": " m ": no pack or map by that name in packs/")
-			}
-		} else if (mode == "list") {
-			for (x = 1; x <= nt; x++) {
-				t = torder[x]
-				set_of(t)
-				# Each name once, with the pack it is in when that is named otherwise, wrapped
-				k = 0
-				line = "  "
-				for (j = 1; j <= n; j++) {
-					if (!((t, j) in S)) continue
-					w = imap[j] != "" ? imap[j] : iname[j]
-					b = irel[j]
-					sub(/.*\//, "", b)
-					if (b != w) w = w " (" irel[j] ")"
-					k++
-					if (length(line) > 2 && length(line) + length(w) + 2 > 88) { body = body line "\n"; line = "  " }
-					line = line (length(line) > 2 ? "  " : "") w
-				}
-				print t " (" k "):" (k ? "\n" body line : " nothing")
-				body = ""
-			}
-		}
-	}' "$INDEX" "$TAGS"
+	awk -v mode="$1" -v q="${2:-}" -v indexf="$INDEX" -f "$AWK/tagsfile.awk" -f "$AWK/tags.awk" "$INDEX" "$TAGS"
 }
 
 # Adds <file> <tab> <map> lines as entries, a pack's maps together
@@ -1032,24 +922,7 @@ fi
 # packs tagnames: every tag in the tags file, one per line, for cs save's picker. Read the
 # way tags() reads them
 if [ "${1:-}" = tagnames ]; then
-	awk '
-	{ sub(/#.*/, "") }
-	{
-		for (i = 1; i <= NF; i++) {
-			w = $i
-			if (w ~ /^\[.*\]$/) {
-				h = tolower(substr(w, 2, length(w) - 2))
-				k = h
-				sub(/\..*$/, "", k)
-				key = substr(h, length(k) + 2)
-				hm = ""
-				if (key != "" && k == "tag") { hm = "tag"; print key }
-				else if (key != "" && (k == "map" || k == "plugin" || k == "pack")) hm = "item"
-				continue
-			}
-			if (hm == "item") { w = tolower(w); sub(/^@/, "", w); print w }
-		}
-	}' "$TAGS" | sort -u
+	awk -f "$AWK/tagsfile.awk" -f "$AWK/tagnames.awk" "$TAGS" | sort -u
 	exit 0
 fi
 
@@ -1060,22 +933,7 @@ if [ "${1:-}" = autotags ]; then
 	names=$(lower "${2:-}")
 	f=$PACKS/${3:-}
 	[ -n "${3:-}" ] && [ -e "$f" ] && names="$names $(pack_maps "$f" | tr '[:upper:]' '[:lower:]' | tr '\n' ' ')"
-	awk '
-	function bad(m) { print "[packs] " m > "/dev/stderr" }
-	{ sub(/#.*/, "") }
-	{
-		for (i = 1; i <= NF; i++) {
-			w = tolower($i)
-			if (w ~ /^\[.*\]$/) {
-				t = substr(w, 2, length(w) - 2)
-				if (t ~ /^tag\.[a-z0-9_-]+$/) t = substr(t, 5)
-				else { bad("autotags: " $i ": not a header like [tag.snow], skipping what is under it"); t = "-" }
-				continue
-			}
-			if (t == "") { if (!top++) bad("autotags: " $i ": before any header, skipped") }
-			else if (t != "-") print t "\t" w
-		}
-	}' "$AUTOTAGS" | while IFS="$(printf '\t')" read -r t p; do
+	awk -f "$AWK/tagsfile.awk" -f "$AWK/autotags.awk" "$AUTOTAGS" | while IFS="$(printf '\t')" read -r t p; do
 		for n in $names; do
 			# shellcheck disable=SC2254 # p is a pattern
 			case $n in $p) printf '%s\n' "$t" && break ;; esac
@@ -1100,61 +958,7 @@ if [ "${1:-}" = tag ]; then
 		*[!a-z0-9_-]*) say "$t: not a tag name (letters, digits, _ and -): skipped" && continue ;;
 		esac
 		rc=0
-		awk -v n="$name" -v t="$t" '
-		function hdr(s,    w) {
-			sub(/#.*/, "", s)
-			if (!match(s, /^[ \t]*\[[^ \t]*\]/)) return ""
-			w = substr(s, RSTART, RLENGTH)
-			gsub(/[ \t]/, "", w)
-			return tolower(substr(w, 2, length(w) - 2))
-		}
-		function words(s, a) { sub(/#.*/, "", s); return split(s, a) }
-		{ L[NR] = $0; H[NR] = hdr($0) }
-		END {
-			ln = tolower(n)
-			for (i = 1; i <= NR; i++) if (H[i] == "tag." t) { s = i; break }
-			if (!s) {
-				for (i = 1; i <= NR; i++) if (H[i] ~ /^tag\./ && substr(H[i], 5) > t) { at = i; break }
-				for (i = 1; i <= NR; i++) {
-					if (i == at) { print "[tag." t "]"; print n; print "" }
-					print L[i]
-				}
-				if (!at) {
-					if (NR && L[NR] !~ /^[ \t]*$/) print ""
-					print "[tag." t "]"
-					print n
-				}
-				exit 0
-			}
-			e = NR + 1
-			for (i = s + 1; i <= NR; i++) if (H[i] != "") { e = i; break }
-			for (i = s; i < e; i++) {
-				k = words(L[i], w)
-				for (j = (i == s ? 2 : 1); j <= k; j++) if (tolower(w[j]) == ln) exit 3
-			}
-			last = 0
-			at = 0
-			for (i = s + 1; i < e; i++) if (words(L[i], w)) { last = i; if (!at && tolower(w[1]) > ln) at = i }
-			before = 0
-			after = 0
-			hl = ""
-			if (last) { if (at) before = at; else after = last }
-			else if ((k = words(L[s], w)) > 1) {
-				hl = w[1]
-				put = 0
-				for (j = 2; j <= k; j++) {
-					if (!put && tolower(w[j]) > ln) { hl = hl " " n; put = 1 }
-					hl = hl " " w[j]
-				}
-				if (!put) hl = hl " " n
-				if ((c = index(L[s], "#"))) hl = hl "  " substr(L[s], c)
-			} else after = s
-			for (i = 1; i <= NR; i++) {
-				if (i == before) print n
-				print (i == s && hl != "" ? hl : L[i])
-				if (i == after) print n
-			}
-		}' "$TAGS" >"$TMP/tags.new" || rc=$?
+		awk -v n="$name" -v t="$t" -f "$AWK/tagsfile.awk" -f "$AWK/tag.awk" "$TAGS" >"$TMP/tags.new" || rc=$?
 		case $rc in
 		0)
 			# Written over, not replaced: the file keeps its owner and mode
@@ -1206,49 +1010,7 @@ if [ "${1:-}" = remove ]; then
 $u"
 	done
 	# The tags file without them, and what went (<section> <tab> <name>)
-	awk -v names="$(lower "$n $r $maps")" -v rep="$TMP/tagrep" '
-	function hdr(s,    w) {
-		sub(/#.*/, "", s)
-		if (!match(s, /^[ \t]*\[[^ \t]*\]/)) return ""
-		w = substr(s, RSTART, RLENGTH)
-		gsub(/[ \t]/, "", w)
-		return tolower(substr(w, 2, length(w) - 2))
-	}
-	function out(s) {
-		if (s ~ /^[ \t]*$/) { if (blank++) return } else blank = 0
-		print s
-	}
-	BEGIN { k = split(names, a, " "); for (i = 1; i <= k; i++) N[a[i]] = 1 }
-	{
-		h = hdr($0)
-		if (h != "") {
-			sec = h
-			kind = h
-			sub(/\..*$/, "", kind)
-			drop = (kind == "map" || kind == "pack" || kind == "plugin") && (substr(h, length(kind) + 2) in N)
-			if (drop) print "[" h "]\t(all of it)" >rep
-		}
-		if (drop) next
-		if (sec !~ /^tag\./) { out($0); next }
-		c = index($0, "#")
-		body = c ? substr($0, 1, c - 1) : $0
-		com = c ? substr($0, c) : ""
-		k = split(body, w)
-		line = ""
-		gone = 0
-		for (j = 1; j <= k; j++) {
-			if (!(h != "" && j == 1) && (tolower(w[j]) in N)) {
-				print "[" sec "]\t" w[j] >rep
-				gone = 1
-				continue
-			}
-			line = line (line == "" ? "" : " ") w[j]
-		}
-		if (!gone) { out($0); next }
-		# A line that had only them goes
-		if (line == "" && com == "") next
-		out(line (com == "" ? "" : (line == "" ? "" : "  ") com))
-	}' "$TAGS" >"$TMP/tags.new" || { say "tags: couldn't read $TAGS" && exit 1; }
+	awk -v names="$(lower "$n $r $maps")" -v rep="$TMP/tagrep" -f "$AWK/tagsfile.awk" -f "$AWK/untag.awk" "$TAGS" >"$TMP/tags.new" || { say "tags: couldn't read $TAGS" && exit 1; }
 	if [ -n "$dry" ]; then
 		o=$(origin "$f")
 		say "packs/$rel${o:+ ($o)}"
@@ -1536,145 +1298,7 @@ for c in $CONTENT; do [ -d "$c" ] && dirs="$dirs $c"; done
 # plugins, maps (the cycle), fastdl (<file> <path>) and xhit (-name patterns that hit)
 : >"$TMP/links" && : >"$TMP/ln" && : >"$TMP/rm" && : >"$TMP/copy" && : >"$TMP/maps"
 awk -F '\t' -v T="$TMP" -v data="$DATA" -v shared="$SHARED" -v amxx_ok="$amxx_ok" \
-	-v content=" $CONTENT " -v default="$DEFAULT" '
-function say(m) { print "[packs] " m > "/dev/stderr" }
-# A shell pattern as a regex, built once
-function re(g,    r, i, j, c, n) {
-	if (g in RE) return RE[g]
-	r = "^"
-	n = length(g)
-	for (i = 1; i <= n; i++) {
-		c = substr(g, i, 1)
-		if (c == "*") r = r ".*"
-		else if (c == "?") r = r "."
-		else if (c == "[" && (j = index(substr(g, i + 1), "]")) > 0) { r = r substr(g, i, j + 1); i += j }
-		else if (index(".+^$(){}|\\[]", c)) r = r "\\" c
-		else r = r c
-	}
-	return RE[g] = r "$"
-}
-function excluded(m,    i) {
-	for (i = 1; i <= nx; i++) if (m ~ re(X[i])) { hit[X[i]] = 1; return 1 }
-	return 0
-}
-# An empty filter has every map
-function in_filter(m, f,    k, a, i) {
-	if (f == "") return 1
-	k = split(f, a, " ")
-	for (i = 1; i <= k; i++) if (m ~ re(a[i])) return 1
-	return 0
-}
-function base(r) { sub(/.*\//, "", r); return r }
-# ../ for each dir in r
-function up(r,    n, s) {
-	n = gsub(/\//, "/", r)
-	s = ""
-	while (n-- > 0) s = s "../"
-	return s
-}
-# Something of the server'"'"'s own there: a file, or a link that isn'"'"'t ours
-function theirs(r) { return (r in real) || ((r in lt) && !(r in ours)) }
-
-function dopack(i,    k, all, wanted, linked, maps, kept, out, dup, plugins, copied, r, src, top, map, b, plugin, tgt, msg) {
-	if (XP[i]) { say(L[i] ": left out"); return }
-	# A pack with maps, none of them wanted: none of its files either
-	all = wanted = 0
-	for (k = 1; k <= npm[i]; k++) {
-		all++
-		if (!excluded(PM[i, k]) && in_filter(PM[i, k], F[i])) wanted++
-	}
-	if (all > 0 && wanted == 0) { say(L[i] ": left out, none of its " all " maps are wanted"); return }
-	linked = maps = kept = out = dup = plugins = copied = 0
-	for (k = 1; k <= nf[i]; k++) {
-		r = R[i, k]
-		src = S[i, k]
-		if (r ~ /^addons\/amxmodx\/scripting\//) continue
-		if (r ~ /^addons\/amxmodx\// && !amxx_ok) { amxx_skipped = 1; continue }
-		if (index(r, "/")) {
-			top = r
-			sub(/\/.*/, "", top)
-			if (!index(content, " " top " ")) continue
-		} else if (r !~ /\.(wad|WAD)$/) continue
-		# A map'"'"'s own files go with it
-		map = ""
-		if (r ~ /^(maps|overviews)\/.*\./) {
-			b = base(r)
-			sub(/\.[^.]*$/, "", b)
-			sub(/_detail$/, "", b)
-			if ((i, b) in hasmap) map = b
-		}
-		if (map != "" && (excluded(map) || !in_filter(map, F[i]))) {
-			if (r == "maps/" map ".bsp") out++
-			continue
-		}
-		# Configs are copied, once: each server changes its own, and CVAR_ writes into
-		# them, which through a link would change the library'"'"'s
-		if (r ~ /^addons\/amxmodx\/configs\// || r ~ /\.(cfg|ini)$/) {
-			if (!theirs(r) && !(r in copying)) {
-				copying[r] = 1
-				print src "\t" r > (T "/copy")
-				copied++
-			}
-			continue
-		}
-		plugin = r ~ /^addons\/amxmodx\/plugins\/.*\.amxx$/ ? base(r) : ""
-		if (r in W) { dup++; continue }
-		if (theirs(r)) {
-			kept++
-			if (plugin != "") print plugin > (T "/plugins")
-			continue
-		}
-		# Relative, so the link works on the host too (./cstrike next to ./data)
-		tgt = src
-		if (!shared && index(src, data "/") == 1) tgt = up(r) "../data/" substr(src, length(data) + 2)
-		W[r] = tgt
-		print r > (T "/links")
-		# What players may download: not the default pack, they have it, and nothing of
-		# the server'"'"'s own (addons, configs)
-		if (P[i] != default && r !~ /^addons\//) print src "\t" r > (T "/fastdl")
-		linked++
-		if (plugin != "") { plugins++; print plugin > (T "/plugins") }
-		if (r == "maps/" map ".bsp") { maps++; LM[i, map] = 1 }
-	}
-	for (k = 1; k <= nc[i]; k++) if ((i, C[i, k]) in LM) print C[i, k] > (T "/maps")
-	msg = L[i] ": " maps " maps, " linked " files"
-	if (plugins) msg = msg ", " plugins " plugins"
-	if (copied) msg = msg ", " copied " configs copied"
-	if (out) msg = msg ", " out " maps left out"
-	if (dup) msg = msg ", " dup " already from a pack before it"
-	if (kept) msg = msg ", " kept " already in cstrike (kept those)"
-	say(msg)
-}
-
-FILENAME == T "/oldlinks" { ours[$0] = 1; next }
-FILENAME == T "/scan" { if ($1 == "l") lt[$2] = $3; else real[$2] = 1; next }
-FILENAME == T "/excludes" { if ($0 != "") X[++nx] = $0; next }
-FILENAME == T "/packinfo" { np = $1; P[$1] = $2; F[$1] = $3; L[$1] = $4; XP[$1] = $5; next }
-FILENAME == T "/cycles" { C[$1, ++nc[$1]] = $2; next }
-# allfiles: the first of a path in a pack wins (a compiled plugin over its .amxx)
-{
-	i = $1
-	if ((i, $2) in seen) next
-	seen[i, $2] = 1
-	R[i, ++nf[i]] = $2
-	S[i, nf[i]] = $3
-	if ($2 ~ /^maps\/[^\/]*\.bsp$/) {
-		m = substr($2, 6, length($2) - 9)
-		hasmap[i, m] = 1
-		PM[i, ++npm[i]] = m
-	}
-}
-END {
-	for (i = 1; i <= np; i++) dopack(i)
-	for (r in ours) if ((r in lt) && !(r in W)) { print r > (T "/rm"); gone++ }
-	for (r in W) {
-		if ((r in lt) && lt[r] == W[r]) same++
-		else { print r "\t" W[r] > (T "/ln"); made++ }
-	}
-	for (g in hit) print g > (T "/xhit")
-	if (amxx_skipped) say("warning: cstrike has no AMX Mod X (ENABLE_AMXMODX), the packs'"'"' plugins aren'"'"'t used")
-	if (made || gone) say("links: " made + 0 " made, " gone + 0 " taken down, " same + 0 " as they were")
-}' "$TMP/oldlinks" "$TMP/scan" "$TMP/excludes" "$TMP/packinfo" "$TMP/cycles" "$TMP/allfiles"
+	-v content=" $CONTENT " -v default="$DEFAULT" -f "$AWK/links.awk" "$TMP/oldlinks" "$TMP/scan" "$TMP/excludes" "$TMP/packinfo" "$TMP/cycles" "$TMP/allfiles"
 
 # Only the difference: links that go, configs copied, links made or changed (ln -f swaps a
 # link that pointed elsewhere)
@@ -1696,39 +1320,7 @@ done <"$TMP/xnames"
 # order. Lines there for plugins still listed stay as they are, with what env-config.sh
 # did to them (AMXX_PLUGIN_<NAME>). A plugin plugins.ini lists elsewhere stays there
 if [ -n "$amxx_ok" ]; then
-	awk -v wantfile="$TMP/plugins" '
-	function name(l,    t) {
-		t = l
-		sub(/^[ \t]+/, "", t)
-		if (index(t, "; env-original: ") == 1) t = substr(t, 17)
-		if (t ~ /^;[^; \t]/) t = substr(t, 2)
-		else if (t ~ /^;/) return ""
-		sub(/[ \t].*$/, "", t)
-		return tolower(t)
-	}
-	BEGIN {
-		B = "; packs: the plugins from data/packlist, rewritten by packs"
-		E = "; packs: end"
-		while ((getline l < wantfile) > 0)
-			if (l != "" && !(tolower(l) in want)) { want[tolower(l)] = 1; order[++n] = l }
-	}
-	$0 == B { inb = 1; seenb = 1; next }
-	$0 == E { inb = 0; next }
-	!inb { print; k = name($0); if (k != "") listed[k] = 1; next }
-	/^; env-managed: / { pend = pend $0 "\n"; next }
-	{ blk[++nb] = pend $0; bk[nb] = name($0); pend = "" }
-	END {
-		if (n == 0) exit
-		print B
-		for (i = 1; i <= nb; i++)
-			if ((bk[i] in want) && !(bk[i] in listed)) { print blk[i]; kept[bk[i]] = 1 }
-		for (k in kept) have[k] = 1
-		for (i = 1; i <= n; i++) {
-			k = tolower(order[i])
-			if (!(k in listed) && !(k in have)) { print order[i]; have[k] = 1 }
-		}
-		print E
-	}' "$PLUGINS_INI" >"$TMP/plugins.ini"
+	awk -v wantfile="$TMP/plugins" -f "$AWK/pluginsini.awk" "$PLUGINS_INI" >"$TMP/plugins.ini"
 	cmp -s "$TMP/plugins.ini" "$PLUGINS_INI" || cat "$TMP/plugins.ini" >"$PLUGINS_INI"
 	n=$(sort -u "$TMP/plugins" | grep -c .) || true
 	[ "$n" = 0 ] || say "plugins: $n in addons/amxmodx/configs/plugins.ini"

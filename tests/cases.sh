@@ -5,7 +5,7 @@
 set -u
 
 H=/opt/hlds G=$H/cstrike D=$H/data FX=/tmp/fx T=/tmp/t
-cp /src/* $H/ && chmod 755 $H/*.sh
+cp -r /src/. $H/ && chmod 755 $H/*.sh
 mkdir -p $FX $T
 
 failed=0 cases=0 bad=
@@ -221,9 +221,10 @@ case_index() {
 	bsp $D/packs/old/maps/de_o.bsp && echo x >$D/packs/old/notes.txt
 	echo '[tag.x] fy_b' >$D/packs/tags
 	echo https://example.com >$D/packs/maps/nest.url
-	tagsfile '[tag.snow] fy_b'
+	tagsfile '[tag.snow] fy_b' 'de_o [tag.xmas] fy_b'
 	packs tags || fail "packs.sh tags failed"
-	grep -q '^  fy_b (maps/nest)$' $T/out || fail "fy_b in nest.zip not found: $(cat $T/out)"
+	logs "[tag.xmas]: a header has to start its line"
+	grep -q '^  fy_b (maps/nest)' $T/out || fail "fy_b in nest.zip not found: $(cat $T/out)"
 	logs "packs/tags: not a pack"
 	nologs "notes.txt" && nologs "nest.url"
 }
