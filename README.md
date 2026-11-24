@@ -79,13 +79,12 @@ The preset itself stays in the repo, so `git pull` brings its updates.
 ### Updating
 
 ```sh
-git pull --recurse-submodules
-./cs up
+./server update
 ```
 
-`git pull` alone doesn't update the submodules (`--recurse-submodules` does, or `git config submodule.recurse true` once). A submodule added since needs `git submodule update --init`.
+That's `git pull --ff-only --recurse-submodules`, `git submodule update --init --recursive` (a submodule added since gets cloned), then `./server up`. `--ff-only`: a clone with commits of its own stops before anything changes, instead of merging. The server restarts.
 
-`./cs up` builds the image and recreates the container: `podman compose up -d --build --force-recreate`, plus tags for the two build stages that take long. `--force-recreate` because podman-compose doesn't notice a new image or a changed env file on its own, and would keep the old container. The tags because an untagged stage is a dangling image, which `podman image prune` deletes: the next build would download CS through SteamCMD again (half an hour). They're `localhost/counter-strike-cache:steam` and `:demo-tools`.
+`./server up` alone builds the image and recreates the container: `podman compose up -d --build --force-recreate`, plus tags for the two build stages that take long. `--force-recreate` because podman-compose doesn't notice a new image or a changed env file on its own, and would keep the old container. The tags because an untagged stage is a dangling image, which `podman image prune` deletes: the next build would download CS through SteamCMD again (half an hour). They're `localhost/counter-strike-cache:steam` and `:demo-tools`.
 
 ### More than one server
 
@@ -509,9 +508,9 @@ podman attach counter-strike
 > [!NOTE]
 > To detach from the console without killing the server, press `CTRL + P` followed by `CTRL + Q`.
 
-Or `./cs attach` in the clone. To send a single command without attaching, use `cs console` (below), which prints the reply.
+Or `./server attach` in the clone. To send a single command without attaching, use `cs console` (below), which prints the reply.
 
-`./cs` alone (or `podman exec -it counter-strike cs`) is the console with tab completion: the server's commands and cvars, the maps, and `cs` with its commands. Up and down go through the history (kept in `data/.cs_history`), and what the server prints shows up as it comes. `cs <command>` runs the commands below (`cs reload`, `cs save ...`, with the pickers). `exit`, `quit` or ctrl-d leave it, and the server keeps running. In `podman exec -it counter-strike bash`, `cs` tab completes too.
+`./server` alone (or `podman exec -it counter-strike cs`) is the console with tab completion: the server's commands and cvars, the maps, and `cs` with its commands. Up and down go through the history (kept in `data/.cs_history`), and what the server prints shows up as it comes. `cs <command>` runs the commands below (`cs reload`, `cs save ...`, with the pickers). `exit`, `quit` or ctrl-d leave it, and the server keeps running. In `podman exec -it counter-strike bash`, `cs` tab completes too.
 
 ## Commands
 
@@ -519,10 +518,21 @@ Or `./cs attach` in the clone. To send a single command without attaching, use `
 
 ```sh
 podman exec counter-strike cs <command>
-./cs <command>        # the same, from the clone: finds its container, and passes on the terminal
+./server <command>    # the same, from the clone: finds its container, and passes on the terminal
 ```
 
-`./cs` uses `podman exec -it` when it's run on a terminal, so the pickers and `cs remove`'s question work without remembering `-it`. It also has the host's side: `./cs up` (`podman compose up -d --build --force-recreate`: podman-compose recreates the container only when `compose.yaml` changes, not for a new image or an edited env file), `./cs build` and `./cs attach`.
+`./server` is the host's side, in the repo's top dir. Its other commands are the container's `cs` ones, run with `podman exec -it` on a terminal, so the pickers and `cs remove`'s question work without remembering `-it`:
+
+| `./server` | |
+|---|---|
+| (none) | the console with tab completion and history, see [Console](#console) |
+| `update` | pull with the submodules, then `up`, see [Updating](#updating) |
+| `up` | build the image, then start the container or recreate it (`podman compose up -d --build --force-recreate`: podman-compose recreates it only when `compose.yaml` changes, not for a new image or an edited env file) |
+| `build` | build the image, with tags for the stages that take long |
+| `attach` | the server's raw console (detach: ctrl-p ctrl-q) |
+| `<command>` | the container's `cs <command>`, below |
+
+The container's `cs`:
 
 | Command | |
 |---|---|

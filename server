@@ -1,0 +1,51 @@
+#!/bin/sh
+# ./server: this checkout's server, from the host.
+#
+#   ./server             the server's console, with tab completion and history
+#   ./server <command>   the container's cs <command> (cs help: reload, save, maps, ...), run
+#                        in this checkout's container, with a terminal when there is one
+#                        (for the pickers and cs remove's question)
+#   ./server update      git pull (fast-forward only) with the submodules, then up
+#   ./server up          build the image (cached, so quick when nothing changed), then start
+#                        the container, or recreate it: podman-compose only recreates when
+#                        compose.yaml changes, not for a new image or edited env files
+#   ./server build       build the image
+#   ./server attach      the server's raw console (detach: ctrl-p ctrl-q)
+cd "$(dirname "$0")" || exit 1
+
+# The build stages that take long (CS through SteamCMD, the demo tool) get a tag of their
+# own: untagged, they're dangling images, which podman image prune deletes, and the next
+# build then downloads CS again. Both come straight from the build cache. A new build moves
+# the tag, so the stage it replaced is left dangling for prune
+build() {
+	podman compose build || return
+	for s in steam demo-tools; do
+		podman build -q --target "$s" -t "localhost/counter-strike-cache:$s" image >/dev/null || return
+	done
+}
+
+up() { build && podman compose up -d --force-recreate; }
+
+case ${1:-} in
+up)
+	up
+	exit
+	;;
+update)
+	# --ff-only: a clone with commits of its own stops here instead of merging. --init: a
+	# submodule added since gets cloned too
+	git pull --ff-only --recurse-submodules && git submodule update --init --recursive && up
+	exit
+	;;
+build)
+	build
+	exit
+	;;
+esac
+c=$(podman ps -a --filter "label=com.docker.compose.project.working_dir=$PWD" --format '{{.Names}}' | head -n 1)
+[ -n "$c" ] || { echo "./server: no container for $PWD: ./server up" >&2 && exit 1; }
+[ "${1:-}" = attach ] && exec podman attach "$c"
+if [ -t 0 ] && [ -t 1 ]; then
+	exec podman exec -it "$c" cs "$@"
+fi
+exec podman exec -i "$c" cs "$@"

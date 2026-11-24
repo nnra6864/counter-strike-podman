@@ -3,7 +3,7 @@
 #
 #   podman exec <container> cs <command>
 #
-#   (none)               on a terminal (podman exec -it, or ./cs on the host): the server's
+#   (none)               on a terminal (podman exec -it, or ./server on the host): the server's
 #                        console, with tab completion (commands, cvars, maps), history
 #                        and line editing. cs <command> runs these; exit or ctrl-d leaves
 #                        (quit too: it doesn't stop the server in here)
