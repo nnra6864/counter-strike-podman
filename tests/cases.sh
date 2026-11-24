@@ -157,6 +157,36 @@ case_reload_unchanged() {
 	nolink maps/de_a.bsp && nolink sound/x/s.wav && link maps/de_dust2.bsp
 }
 
+case_fastdl_shared() {
+	fresh
+	L=$H/library
+	mkdir -p $L/packs/maps && bsp $L/packs/maps/de_a.bsp && mkdir -p $L/packs/s/sound/x && echo s >$L/packs/s/sound/x/s.wav
+	packlist default '*'
+	FASTDL_URL=http://host/srv/ packs || fail "packs.sh failed"
+	link maps/de_a.bsp && link sound/x/s.wav
+	[ -e $L/fastdl/srv/maps/de_a.bsp ] && [ -e $L/fastdl/srv/sound/x/s.wav ] || fail "fastdl links missing or broken"
+	[ ! -e $L/fastdl/srv/maps/de_dust2.bsp ] || fail "the default pack is in fastdl"
+	[ -f $L/servers/srv ] || fail "no servers/srv"
+	logs "fastdl: 2 files"
+}
+
+case_big_pack() {
+	fresh
+	mkdir -p $D/packs/big/sound/a $D/packs/big/sound/b
+	i=0
+	while [ $i -lt 1000 ]; do
+		echo $i >$D/packs/big/sound/a/$i.wav && echo $i >$D/packs/big/sound/b/$i.wav
+		i=$((i + 1))
+	done
+	packlist big
+	s=$(date +%s%N) && packs && e=$(date +%s%N) || fail "packs.sh failed"
+	echo "    first run: $(((e - s) / 1000000)) ms"
+	s=$(date +%s%N) && packs && e=$(date +%s%N)
+	echo "    reload: $(((e - s) / 1000000)) ms"
+	[ "$(find $G/sound -type l | wc -l)" = 2000 ] || fail "not 2000 links"
+	logs "big: 0 maps, 2000 files"
+}
+
 case_readonly() {
 	fresh
 	rm -rf $D

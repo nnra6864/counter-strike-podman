@@ -55,7 +55,7 @@
 # A pack dir is laid out like cstrike: maps/de_x.bsp, gfx/env/, sound/, x.wad. Files that
 # are already in cstrike (not links) are never replaced, so cstrike/maps still works for
 # maps you'd rather not put in a pack. The links made are listed in
-# cstrike/packs_links.txt, and taken down the next time before the new ones go up.
+# cstrike/packs_links.txt. A run changes only the links that differ from the last one's.
 
 GAME=/opt/hlds/cstrike
 DATA=/opt/hlds/data
@@ -80,8 +80,6 @@ on() {
 	return 1
 }
 lower() { printf %s "$1" | tr '[:upper:]' '[:lower:]'; }
-# ../ for each dir in relative path $1
-up() { printf %s "$1" | sed 's|[^/]*$||; s|[^/]*/|../|g'; }
 
 if [ -d /opt/hlds/library ]; then
 	LIB=/opt/hlds/library SHARED=1
@@ -1336,13 +1334,10 @@ fi
 
 # Links ---------------------------------------------------------------------------------
 
-# Take down the last run's links
-if [ -f "$LINKS" ]; then
-	while IFS= read -r r; do
-		[ -L "$GAME/$r" ] && rm -f "$GAME/$r"
-	done <"$LINKS"
-fi
-: >"$TMP/links" && : >"$TMP/maps"
+# What's linked is worked out first and compared with what's there, and only the
+# difference is changed: a reload that changes nothing touches nothing, and maps the
+# server has don't go missing while it runs
+TAB=$(printf '\t')
 
 # Volumes made before the default pack have its maps as files in cstrike: remove them where
 # they're the same as the image's, so the default pack (or leaving it out) decides
@@ -1363,32 +1358,38 @@ while IFS= read -r r; do
 done <"$TMP/default"
 [ $moved = 0 ] || say "$moved default map files in cstrike replaced by the default pack"
 
-# Is map $1 in filter $2: patterns, any of them. An empty filter has every map
-in_filter() {
-	[ -n "$2" ] || return 0
-	set -f
-	for _p in $2; do
-		# shellcheck disable=SC2254 # a pattern
-		case $1 in $_p) set +f && return 0 ;; esac
-	done
-	set +f
-	return 1
-}
-
-excluded() {
-	while IFS= read -r g; do
-		# shellcheck disable=SC2254 # a pattern
-		case $1 in $g) printf '%s\n' "$g" >>"$TMP/xhit" && return 0 ;; esac
-	done <"$TMP/excludes"
-	return 1
-}
-
 # Maps of pack $1 in cycle order: its mapcycle.txt first, then the rest by name
 cycle_order() {
 	{
 		[ -f "$1/mapcycle.txt" ] && sed 's/[[:space:]].*//; /^$/d; /^\/\//d' "$1/mapcycle.txt"
 		find "$1/maps" -maxdepth 1 -type f -name '*.bsp' 2>/dev/null | sed 's|.*/||; s|\.bsp$||' | sort
 	} | awk '!seen[$0]++'
+}
+
+# Makes the links in file $2 (<path> <tab> <target>) under dir $1, a few forks per dir
+# rather than per link: ln -t names a link after its target. Replaces links there
+link_all() {
+	[ -s "$2" ] || return 0
+	rm -rf "$TMP/lnd" && mkdir "$TMP/lnd"
+	awk -F '\t' -v one="$TMP/lnd/one" '
+		{
+			b = $1; sub(/.*\//, "", b)
+			t = $2; sub(/.*\//, "", t)
+			if (b != t) { print > one; next }
+			d = $1
+			if (!sub(/\/[^\/]*$/, "", d)) d = "."
+			print d "\t" $2
+		}' "$2" | sort -t "$TAB" -k 1,1 -s | awk -F '\t' -v out="$TMP/lnd" '
+		$1 != d { if (n) close(f); d = $1; f = out "/" ++n; print n "\t" d > (out "/dirs") }
+		{ print $2 > f }'
+	[ -f "$TMP/lnd/dirs" ] && while IFS="$TAB" read -r k d; do
+		mkdir -p "$1/$d" && tr '\n' '\0' <"$TMP/lnd/$k" | xargs -0 ln -sfn -t "$1/$d" --
+	done <"$TMP/lnd/dirs"
+	[ -f "$TMP/lnd/one" ] && while IFS="$TAB" read -r r t; do
+		case $r in */*) mkdir -p "$1/${r%/*}" ;; esac
+		ln -sfn -- "$t" "$1/$r"
+	done <"$TMP/lnd/one"
+	return 0
 }
 
 # Compiles plugin source $1 with the image's amxxpc and the pack's include dir $2, into the
@@ -1419,146 +1420,208 @@ compile() {
 	return 1
 }
 
-# Where a link at cstrike/$1 points, for file $2
-link_target() {
-	case $2 in
-	"$DATA"/*)
-		# Relative, so the link works on the host too (./cstrike next to ./data)
-		[ -z "$SHARED" ] && printf '%s../data/%s' "$(up "$1")" "${2#"$DATA"/}" && return 0
-		;;
-	esac
-	printf '%s' "$2"
-}
-
 # AMX Mod X files only go in when cstrike has it: the entrypoint installs it whole into a
 # volume without an addons/amxmodx, which a link there would stop
 amxx_ok=
 [ -f "$PLUGINS_INI" ] && amxx_ok=1
-amxx_skipped=
 
-while IFS="$(printf '\t')" read -r pack filter; do
+# Each pack in packlist order: packinfo <n> <dir> <maps filter> <label> <left out>,
+# allfiles <n> <path in cstrike> <file> (plugins compiled from source first: they win over
+# a .amxx the pack has), cycles <n> <map> (its maps in cycle order)
+: >"$TMP/packinfo" && : >"$TMP/allfiles" && : >"$TMP/cycles"
+i=0
+while IFS="$TAB" read -r pack filter; do
+	i=$((i + 1))
 	case $pack in
 	"$DEFAULT") label=default ;;
 	"$CACHE"/packs/*) label=packs/${pack#"$CACHE"/packs/} ;;
 	*) label=${pack#"$LIB"/} ;;
 	esac
 	[ -f "$pack/.source" ] && label="$label ($(head -n 1 "$pack/.source"))"
-	linked=0 maps=0 kept=0 out=0 dup=0 plugins=0 copied=0
-	if grep -qxF -e "$pack" "$TMP/xpacks"; then
-		say "$label: left out"
-		continue
-	fi
-	cd "$pack" || continue
-	# A pack with maps, none of them wanted: none of its files either
-	all=0 wanted=0
-	for b in maps/*.bsp; do
-		[ -f "$b" ] || continue
-		b=${b##*/}
-		b=${b%.bsp}
-		all=$((all + 1))
-		if ! excluded "$b" && in_filter "$b" "$filter"; then wanted=$((wanted + 1)); fi
-	done
-	if [ $all -gt 0 ] && [ $wanted = 0 ]; then
-		say "$label: left out, none of its $all maps are wanted"
-		continue
-	fi
-	# <path in cstrike> <tab> <file>. Plugins compiled from source first: they win over a
-	# .amxx the pack has
-	{
-		for f in addons/amxmodx/scripting/*.sma; do
-			[ -f "$f" ] && [ -n "$amxx_ok" ] || continue
-			n=${f##*/}
-			n=${n%.*}
-			inc=
-			[ -d addons/amxmodx/scripting/include ] && inc=$pack/addons/amxmodx/scripting/include
-			if a=$(compile "$pack/$f" "$inc"); then
-				printf 'addons/amxmodx/plugins/%s.amxx\t%s\n' "$n" "$a"
-			fi
-		done
-		find . -type f ! -path '*/.*' | sed 's|^\./||' | sort | awk -v p="$pack" '{ print $0 "\t" p "/" $0 }'
-	} | awk -F '\t' '!seen[$1]++' >"$TMP/files"
-	: >"$TMP/packmaps"
-	while IFS="$(printf '\t')" read -r r src; do
-		case $r in
-		addons/amxmodx/scripting/*) continue ;;
-		addons/amxmodx/*)
-			if [ -z "$amxx_ok" ]; then
-				amxx_skipped=1
-				continue
-			fi
-			;;
-		esac
-		case $r in
-		*/*) case " $CONTENT " in *" ${r%%/*} "*) ;; *) continue ;; esac ;;
-		*.wad | *.WAD) ;;
-		*) continue ;;
-		esac
-		# A map's own files go with it
-		map=
-		case $r in
-		maps/*.* | overviews/*.*)
-			b=${r##*/}
-			b=${b%.*}
-			b=${b%_detail}
-			[ -f "maps/$b.bsp" ] && map=$b
-			;;
-		esac
-		if [ -n "$map" ]; then
-			# shellcheck disable=SC2254 # a pattern
-			if excluded "$map" || ! in_filter "$map" "$filter"; then
-				[ "$r" = "maps/$map.bsp" ] && out=$((out + 1))
-				continue
-			fi
+	x=0
+	grep -qxF -e "$pack" "$TMP/xpacks" && x=1
+	printf '%s\t%s\t%s\t%s\t%s\n' "$i" "$pack" "$filter" "$label" "$x" >>"$TMP/packinfo"
+	[ $x = 0 ] && cd "$pack" || continue
+	for f in addons/amxmodx/scripting/*.sma; do
+		[ -f "$f" ] && [ -n "$amxx_ok" ] || continue
+		n=${f##*/}
+		n=${n%.*}
+		inc=
+		[ -d addons/amxmodx/scripting/include ] && inc=$pack/addons/amxmodx/scripting/include
+		if a=$(compile "$pack/$f" "$inc"); then
+			printf '%s\taddons/amxmodx/plugins/%s.amxx\t%s\n' "$i" "$n" "$a"
 		fi
-		dest=$GAME/$r
-		# Configs are copied, once: each server changes its own, and CVAR_ writes into
-		# them, which through a link would change the library's
-		case $r in
-		addons/amxmodx/configs/* | *.cfg | *.ini)
-			if [ ! -e "$dest" ] && [ ! -L "$dest" ] && mkdir -p "${dest%/*}" && cp "$src" "$dest"; then
-				copied=$((copied + 1))
-			fi
-			continue
-			;;
-		esac
-		plugin=
-		case $r in addons/amxmodx/plugins/*.amxx) plugin=${r##*/} ;; esac
-		if [ -L "$dest" ]; then
-			dup=$((dup + 1))
-			continue
-		elif [ -e "$dest" ]; then
-			kept=$((kept + 1))
-			[ -n "$plugin" ] && printf '%s\n' "$plugin" >>"$TMP/plugins"
-			continue
-		fi
-		if ! mkdir -p "${dest%/*}" || ! ln -s "$(link_target "$r" "$src")" "$dest"; then continue; fi
-		printf '%s\n' "$r" >>"$TMP/links"
-		# What players may download: not the default pack, they have it, and nothing of
-		# the server's own (addons, configs)
-		case $pack:$r in
-		"$DEFAULT":* | *:addons/*) ;;
-		*) printf '%s\t%s\n' "$src" "$r" >>"$TMP/fastdl" ;;
-		esac
-		linked=$((linked + 1))
-		if [ -n "$plugin" ]; then
-			plugins=$((plugins + 1))
-			printf '%s\n' "$plugin" >>"$TMP/plugins"
-		fi
-		if [ "$r" = "maps/$map.bsp" ]; then
-			maps=$((maps + 1))
-			printf '%s\n' "$map" >>"$TMP/packmaps"
-		fi
-	done <"$TMP/files"
-	cycle_order "$pack" | grep -xF -f "$TMP/packmaps" >>"$TMP/maps"
-	msg="$label: $maps maps, $linked files"
-	[ $plugins = 0 ] || msg="$msg, $plugins plugins"
-	[ $copied = 0 ] || msg="$msg, $copied configs copied"
-	[ $out = 0 ] || msg="$msg, $out maps left out"
-	[ $dup = 0 ] || msg="$msg, $dup already from a pack before it"
-	[ $kept = 0 ] || msg="$msg, $kept already in cstrike (kept those)"
-	say "$msg"
+	done >>"$TMP/allfiles"
+	find . -type f ! -path '*/.*' | sed 's|^\./||' | sort |
+		awk -v i="$i" -v p="$pack" '{ print i "\t" $0 "\t" p "/" $0 }' >>"$TMP/allfiles"
+	cycle_order "$pack" | awk -v i="$i" '{ print i "\t" $0 }' >>"$TMP/cycles"
 done <"$TMP/entries"
 
+# What cstrike has where packs put files: <l|f> <path> <link target>
+cd "$GAME" || exit 1
+dirs=
+for c in $CONTENT; do [ -d "$c" ] && dirs="$dirs $c"; done
+{
+	# shellcheck disable=SC2086 # dir names
+	[ -z "$dirs" ] || find $dirs \( -type l -printf 'l\t%p\t%l\n' \) -o \( ! -type d -printf 'f\t%p\t\n' \)
+	find . -maxdepth 1 \( -type l -printf 'l\t%P\t%l\n' \) -o \( ! -type d -printf 'f\t%P\t\n' \)
+} >"$TMP/scan"
+: >"$TMP/oldlinks"
+[ -f "$LINKS" ] && cat "$LINKS" >"$TMP/oldlinks"
+
+# The plan. Writes links (every link wanted, the new packs_links.txt), ln (<path> <target>,
+# links to make or change), rm (links that go), copy (<file> <path>, configs to copy),
+# plugins, maps (the cycle), fastdl (<file> <path>) and xhit (-name patterns that hit)
+: >"$TMP/links" && : >"$TMP/ln" && : >"$TMP/rm" && : >"$TMP/copy" && : >"$TMP/maps"
+awk -F '\t' -v T="$TMP" -v data="$DATA" -v shared="$SHARED" -v amxx_ok="$amxx_ok" \
+	-v content=" $CONTENT " -v default="$DEFAULT" '
+function say(m) { print "[packs] " m > "/dev/stderr" }
+# A shell pattern as a regex, built once
+function re(g,    r, i, j, c, n) {
+	if (g in RE) return RE[g]
+	r = "^"
+	n = length(g)
+	for (i = 1; i <= n; i++) {
+		c = substr(g, i, 1)
+		if (c == "*") r = r ".*"
+		else if (c == "?") r = r "."
+		else if (c == "[" && (j = index(substr(g, i + 1), "]")) > 0) { r = r substr(g, i, j + 1); i += j }
+		else if (index(".+^$(){}|\\[]", c)) r = r "\\" c
+		else r = r c
+	}
+	return RE[g] = r "$"
+}
+function excluded(m,    i) {
+	for (i = 1; i <= nx; i++) if (m ~ re(X[i])) { hit[X[i]] = 1; return 1 }
+	return 0
+}
+# An empty filter has every map
+function in_filter(m, f,    k, a, i) {
+	if (f == "") return 1
+	k = split(f, a, " ")
+	for (i = 1; i <= k; i++) if (m ~ re(a[i])) return 1
+	return 0
+}
+function base(r) { sub(/.*\//, "", r); return r }
+# ../ for each dir in r
+function up(r,    n, s) {
+	n = gsub(/\//, "/", r)
+	s = ""
+	while (n-- > 0) s = s "../"
+	return s
+}
+# Something of the server'"'"'s own there: a file, or a link that isn'"'"'t ours
+function theirs(r) { return (r in real) || ((r in lt) && !(r in ours)) }
+
+function dopack(i,    k, all, wanted, linked, maps, kept, out, dup, plugins, copied, r, src, top, map, b, plugin, tgt, msg) {
+	if (XP[i]) { say(L[i] ": left out"); return }
+	# A pack with maps, none of them wanted: none of its files either
+	all = wanted = 0
+	for (k = 1; k <= npm[i]; k++) {
+		all++
+		if (!excluded(PM[i, k]) && in_filter(PM[i, k], F[i])) wanted++
+	}
+	if (all > 0 && wanted == 0) { say(L[i] ": left out, none of its " all " maps are wanted"); return }
+	linked = maps = kept = out = dup = plugins = copied = 0
+	for (k = 1; k <= nf[i]; k++) {
+		r = R[i, k]
+		src = S[i, k]
+		if (r ~ /^addons\/amxmodx\/scripting\//) continue
+		if (r ~ /^addons\/amxmodx\// && !amxx_ok) { amxx_skipped = 1; continue }
+		if (index(r, "/")) {
+			top = r
+			sub(/\/.*/, "", top)
+			if (!index(content, " " top " ")) continue
+		} else if (r !~ /\.(wad|WAD)$/) continue
+		# A map'"'"'s own files go with it
+		map = ""
+		if (r ~ /^(maps|overviews)\/.*\./) {
+			b = base(r)
+			sub(/\.[^.]*$/, "", b)
+			sub(/_detail$/, "", b)
+			if ((i, b) in hasmap) map = b
+		}
+		if (map != "" && (excluded(map) || !in_filter(map, F[i]))) {
+			if (r == "maps/" map ".bsp") out++
+			continue
+		}
+		# Configs are copied, once: each server changes its own, and CVAR_ writes into
+		# them, which through a link would change the library'"'"'s
+		if (r ~ /^addons\/amxmodx\/configs\// || r ~ /\.(cfg|ini)$/) {
+			if (!theirs(r) && !(r in copying)) {
+				copying[r] = 1
+				print src "\t" r > (T "/copy")
+				copied++
+			}
+			continue
+		}
+		plugin = r ~ /^addons\/amxmodx\/plugins\/.*\.amxx$/ ? base(r) : ""
+		if (r in W) { dup++; continue }
+		if (theirs(r)) {
+			kept++
+			if (plugin != "") print plugin > (T "/plugins")
+			continue
+		}
+		# Relative, so the link works on the host too (./cstrike next to ./data)
+		tgt = src
+		if (!shared && index(src, data "/") == 1) tgt = up(r) "../data/" substr(src, length(data) + 2)
+		W[r] = tgt
+		print r > (T "/links")
+		# What players may download: not the default pack, they have it, and nothing of
+		# the server'"'"'s own (addons, configs)
+		if (P[i] != default && r !~ /^addons\//) print src "\t" r > (T "/fastdl")
+		linked++
+		if (plugin != "") { plugins++; print plugin > (T "/plugins") }
+		if (r == "maps/" map ".bsp") { maps++; LM[i, map] = 1 }
+	}
+	for (k = 1; k <= nc[i]; k++) if ((i, C[i, k]) in LM) print C[i, k] > (T "/maps")
+	msg = L[i] ": " maps " maps, " linked " files"
+	if (plugins) msg = msg ", " plugins " plugins"
+	if (copied) msg = msg ", " copied " configs copied"
+	if (out) msg = msg ", " out " maps left out"
+	if (dup) msg = msg ", " dup " already from a pack before it"
+	if (kept) msg = msg ", " kept " already in cstrike (kept those)"
+	say(msg)
+}
+
+FILENAME == T "/oldlinks" { ours[$0] = 1; next }
+FILENAME == T "/scan" { if ($1 == "l") lt[$2] = $3; else real[$2] = 1; next }
+FILENAME == T "/excludes" { if ($0 != "") X[++nx] = $0; next }
+FILENAME == T "/packinfo" { np = $1; P[$1] = $2; F[$1] = $3; L[$1] = $4; XP[$1] = $5; next }
+FILENAME == T "/cycles" { C[$1, ++nc[$1]] = $2; next }
+# allfiles: the first of a path in a pack wins (a compiled plugin over its .amxx)
+{
+	i = $1
+	if ((i, $2) in seen) next
+	seen[i, $2] = 1
+	R[i, ++nf[i]] = $2
+	S[i, nf[i]] = $3
+	if ($2 ~ /^maps\/[^\/]*\.bsp$/) {
+		m = substr($2, 6, length($2) - 9)
+		hasmap[i, m] = 1
+		PM[i, ++npm[i]] = m
+	}
+}
+END {
+	for (i = 1; i <= np; i++) dopack(i)
+	for (r in ours) if ((r in lt) && !(r in W)) { print r > (T "/rm"); gone++ }
+	for (r in W) {
+		if ((r in lt) && lt[r] == W[r]) same++
+		else { print r "\t" W[r] > (T "/ln"); made++ }
+	}
+	for (g in hit) print g > (T "/xhit")
+	if (amxx_skipped) say("warning: cstrike has no AMX Mod X (ENABLE_AMXMODX), the packs'"'"' plugins aren'"'"'t used")
+	if (made || gone) say("links: " made + 0 " made, " gone + 0 " taken down, " same + 0 " as they were")
+}' "$TMP/oldlinks" "$TMP/scan" "$TMP/excludes" "$TMP/packinfo" "$TMP/cycles" "$TMP/allfiles"
+
+# Only the difference: links that go, configs copied, links made or changed (ln -f swaps a
+# link that pointed elsewhere)
+tr '\n' '\0' <"$TMP/rm" | xargs -0 -r rm -f --
+while IFS="$TAB" read -r src r; do
+	case $r in */*) mkdir -p "${r%/*}" ;; esac
+	cp "$src" "$r"
+done <"$TMP/copy"
+link_all "$GAME" "$TMP/ln"
 cat "$TMP/links" >"$LINKS"
 # -name lines that left nothing out: a typo, most likely
 while IFS= read -r g; do
@@ -1566,7 +1629,6 @@ while IFS= read -r g; do
 	tags match "$g" | grep -q . && continue
 	say "warning: -$g: no pack or map by that name"
 done <"$TMP/xnames"
-[ -z "$amxx_skipped" ] || say "warning: cstrike has no AMX Mod X (ENABLE_AMXMODX), the packs' plugins aren't used"
 
 # The packs' plugins in amxmodx's plugins.ini, between the "; packs:" lines, in packlist
 # order. Lines there for plugins still listed stay as they are, with what env-config.sh
@@ -1624,11 +1686,13 @@ fi
 if [ -n "${FASTDL_URL:-}" ] && [ -n "$SERVER" ]; then
 	new=$LIB/fastdl/.new.$SERVER
 	rm -rf "$new" && mkdir -p "$new"
-	n=0
-	while IFS="$(printf '\t')" read -r src r; do
-		case $r in */*) mkdir -p "$new/${r%/*}" ;; esac
-		ln -s "$(up "$r")../../${src#"$LIB"/}" "$new/$r" && n=$((n + 1))
-	done <"$TMP/fastdl"
+	awk -F '\t' -v lib="$LIB" '{
+		r = $2; n = gsub(/\//, "/", r); u = ""
+		while (n-- > 0) u = u "../"
+		print $2 "\t" u "../../" substr($1, length(lib) + 2)
+	}' "$TMP/fastdl" >"$TMP/fastdl.ln"
+	link_all "$new" "$TMP/fastdl.ln"
+	n=$(find "$new" -type l | wc -l)
 	chmod -R a+rX "$new"
 	rm -rf "$LIB/fastdl/.old.$SERVER"
 	[ -e "$LIB/fastdl/$SERVER" ] && mv "$LIB/fastdl/$SERVER" "$LIB/fastdl/.old.$SERVER"

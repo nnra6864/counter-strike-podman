@@ -215,7 +215,7 @@ Each URL is downloaded once, and laid out like `cstrike` whatever the archive lo
 The map cycle is every map from the packs, in packlist order (`cstrike/packs_mapcycle.txt`); within a pack, its `mapcycle.txt` first (`default` has the stock one), then the rest by name. `MAPCYCLE: "0"` keeps `mapcycle.txt`.
 If `MAP` is one the packs left out, the server starts on the first map in the cycle.
 
-The links are listed in `cstrike/packs_links.txt` and taken down each time before the new ones go up. Files already in `cstrike` (not links) are never replaced, so maps put straight into `cstrike/maps` still work.
+The links are listed in `cstrike/packs_links.txt` and each run changes only the ones that differ, so a reload never takes away a map the server is using. Files already in `cstrike` (not links) are never replaced, so maps put straight into `cstrike/maps` still work.
 Volumes from before packs have the stock maps as files in `cstrike/maps`: the first start removes the ones that are the same as the image's, and links them back from `default`.
 
 #### Tags
