@@ -220,15 +220,34 @@ RUN --mount=type=cache,target=/zig-cache \
     /out/bin/goldsrc-demo-tools voice testdata/one-player.dem --dump > /dev/null
 
 
-# Stage 4: minimal runtime
+# Stage 4: rlwrap, the line editing, history and completion of cs's interactive console
+# (scripts/cs.sh). From source: Debian's package pulls in perl and python3 (90 MB) for its
+# filters, which cs doesn't use
+FROM docker.io/library/debian:trixie-slim@sha256:ab3b3c8c5159eebfca4376430132d53c4d425f869c765ecbe47177a030da575d AS rlwrap
+
+ARG RLWRAP_VER=0.48
+# The digest GitHub lists for the release
+ARG RLWRAP_SHA256=cdf69074a216a8284574dddd145dd046c904ad5330a616e0eed53c9043f2ecbc
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates curl gcc make libc6-dev libreadline-dev && \
+    rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL -o /tmp/rlwrap.tar.gz https://github.com/hanslub42/rlwrap/releases/download/v${RLWRAP_VER}/rlwrap-${RLWRAP_VER}.tar.gz && \
+    echo "${RLWRAP_SHA256}  /tmp/rlwrap.tar.gz" | sha256sum -c - && \
+    tar -xzf /tmp/rlwrap.tar.gz -C /tmp && cd /tmp/rlwrap-${RLWRAP_VER} && \
+    ./configure -q --prefix=/usr/local --without-libptytty && make -s -j"$(nproc)" && \
+    install -s -m 755 src/rlwrap /usr/local/bin/rlwrap
+
+
+# Stage 5: minimal runtime
 FROM docker.io/library/debian:trixie-slim@sha256:ab3b3c8c5159eebfca4376430132d53c4d425f869c765ecbe47177a030da575d AS runtime
 
 # curl, jq and bsdtar (libarchive-tools: zip, rar, 7z) download packs, zip and unzip read and
-# write the URL in a zip's comment, see scripts/packs.sh
+# write the URL in a zip's comment, see scripts/packs.sh. libreadline8t64 for rlwrap
 RUN dpkg --add-architecture i386 && \
     apt-get update && \
     apt-get install -y --no-install-recommends libc6:i386 libstdc++6:i386 lib32gcc-s1 ca-certificates \
-        curl jq libarchive-tools zip unzip && \
+        curl jq libarchive-tools zip unzip libreadline8t64 && \
     rm -rf /var/lib/apt/lists/*
 
 # Runs as root inside the container. Under rootless podman that is the host user, so files
@@ -241,6 +260,7 @@ COPY --from=steam --chown=0:0 /home/steam/.steam /root/.steam
 # The add-ons over the CS files, in a small layer of their own
 COPY --from=addons --chown=0:0 /out/ /opt/hlds/
 COPY --from=demo-tools /out/bin/goldsrc-demo-tools /usr/local/bin/
+COPY --from=rlwrap /usr/local/bin/rlwrap /usr/local/bin/
 
 EXPOSE 27015/udp 27015/tcp
 ENTRYPOINT ["/opt/hlds/entrypoint.sh"]
@@ -251,7 +271,9 @@ ENTRYPOINT ["/opt/hlds/entrypoint.sh"]
 CMD ["./hlds_run", "-game", "cstrike", "+map", "de_dust2"]
 
 # `podman exec <container> cs <command>`: reload, tags, save, console (see scripts/cs.sh).
-RUN ln -s /opt/hlds/cs.sh /usr/local/bin/cs
+# Its tab completion in bash (podman exec -it <container> bash)
+RUN ln -s /opt/hlds/cs.sh /usr/local/bin/cs && \
+    echo '. /opt/hlds/completion.bash' >> /etc/bash.bashrc
 
 # Our scripts last, so editing them only rebuilds this small layer.
 # ENABLE_* picks the components, data/packlist the maps, CVAR_*, AMXX_* and METAMOD_* edit the configs, HLTV_* configure HLTV.

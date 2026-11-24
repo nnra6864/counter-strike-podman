@@ -86,3 +86,13 @@ Taken care of on 2026-11-24, see git log. Left:
 - [x] Image: checksums for every download, base images pinned by digest, trixie instead of bookworm, the HL1 campaign maps and music, `linux64/` and SteamCMD's leftovers out (1.22 GB → 840 MB). Built, tests pass, a start with HLTV and a map change work (2026-11-24)
 - [ ] `hltv_tools` (in the hltv-tools repo): writes the player count only when it changes. And HLTV counts as a player when it connects (`get_players` "chi" 0.1 s after `client_connect`, before it's flagged as HLTV), so every server start begins a recording nobody needs, stopped after `RECORD_IDLE_STOP`
 - [ ] "Demo finished" (the header's directory offset, `od -j 540`) in `goldsrc-demo-tools` (`info --finished`), used by `hltv.sh` and `demos.sh`
+
+## 9. The `cs` command
+
+- [x] `cs` alone on a terminal (`./cs`): the console through rlwrap, with tab completion (commands, cvars, maps, `cs` and its commands), history in `data/.cs_history`, the server's output as it comes, the pickers working inside it. `cs` tab completes in the container's bash (2026-11-24)
+- [x] `cs maps` one map per line, in cycle order (2026-11-24)
+- [x] A usage mistake says what's wrong in one line instead of printing the whole help (2026-11-24)
+- [ ] Completion that knows its place: maps only after `changelevel`/`map`/`amx_map`/`votemap`, a cvar's value after the cvar, packs after `cs remove`. rlwrap completes from one word list, so this needs our own line editor
+- [ ] Rewrite `cs` in Zig (it already builds `goldsrc-demo-tools`): its own line editor with that completion, and the packs logic out of awk and sh. Big: `packs.sh` and its awk are ~1,500 lines with 16 test cases to keep passing
+- [ ] Web UI: status, players, map change, the console, packs and tags. Behind angie, NetBird only. After the Zig rewrite, served by it
+- [ ] zlist (github.com/here-Leslie-Lau/zlist, Zig) for listing packs and maps: `cs maps` is one per line now; worth it if `cs` gets a browse view of `packs/`
