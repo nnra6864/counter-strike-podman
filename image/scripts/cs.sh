@@ -23,6 +23,8 @@
 #                        delete a pack from packs/, and its name and its maps' from the tags
 #                        file. Says what goes and asks first (podman exec -it), or -y.
 #                        -r: then reload, so this server drops it now
+#   maps                 what this server has from the packs: the map cycle, and the
+#                        plugins in plugins.ini
 #   console <command>    send a command to the server's console, and print its reply
 #   log [-f] [lines]     the last lines the container printed (100), -f to follow
 
@@ -139,7 +141,7 @@ save() {
 	elif [ -n "$used" ]; then
 		say "$name is in; its plugins load with the next map (cs reload --now restarts it)"
 	else
-		say "nothing from packs/$rel is in use: data/packlist doesn't pick it (by name, a"
+		say "nothing from packs/$rel is in use: the packlist doesn't pick it (by name, a"
 		say "  pattern or a tag), or other packs have its files. Add it, then cs reload"
 	fi
 }
@@ -199,6 +201,27 @@ remove) remove "$@" ;;
 console)
 	[ $# -gt 0 ] || { usage && exit 1; }
 	console "$@"
+	;;
+maps)
+	if [ -f "$GAME/packs_mapcycle.txt" ]; then
+		echo "map cycle (packs_mapcycle.txt, $(grep -c . "$GAME/packs_mapcycle.txt") maps):"
+		# In columns, in cycle order down each
+		awk '{ m[NR] = $0; if (length($0) > w) w = length($0) }
+			END {
+				c = int(86 / (w + 2)); if (c < 1) c = 1
+				r = int((NR + c - 1) / c)
+				for (i = 1; i <= r; i++) {
+					l = " "
+					for (j = i; j <= NR; j += r) l = l sprintf(" %-" w "s", m[j])
+					sub(/ +$/, "", l); print l
+				}
+			}' "$GAME/packs_mapcycle.txt"
+	else
+		echo "map cycle: mapcycle.txt (MAPCYCLE=0)"
+	fi
+	echo "plugins from the packs (addons/amxmodx/configs/plugins.ini):"
+	sed -n '/^; packs: the plugins/,/^; packs: end/{/^; packs:/d;/^; env-managed:/d;s/^/  /;p}' \
+		"$GAME/addons/amxmodx/configs/plugins.ini" 2>/dev/null | grep . || echo "  none"
 	;;
 log)
 	[ -f "$LOG" ] || { echo "cs: no $LOG (the container started before it was kept)" >&2 && exit 1; }

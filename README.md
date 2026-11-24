@@ -168,6 +168,16 @@ packs/
 
 `default` is the maps CS ships with, kept in the image.
 
+The packlist can also be in `compose.override.yaml`, with the server's other settings. `PACKLIST`, when set, is used instead of `data/packlist`:
+
+```yaml
+    environment:
+      PACKLIST: |
+        default
+        @competitive
+        -@xmas
+```
+
 `data/packlist` lists the packs in order, one per line, `#` for comments; the first pack wins a file two packs both have.
 The first start writes one with `default` and `*`.
 
@@ -522,6 +532,7 @@ podman exec counter-strike cs <command>
 | `save [-r] [-t tags] <URL> [dir]` | download a map or plugin into `packs/`, as a zip with its URL, see [Where a pack came from](#where-a-pack-came-from). `save` alone lists the packlists' downloads, which can be saved by name. `-t snow,xmas` tags it (with `podman exec -it`, a picker instead), `-r` reloads after, see [Saving with tags](#saving-with-tags-and-a-reload) |
 | `remove [-r] [-y] <pack or map>` | delete a pack from `packs/` and take it out of the tags file, after asking, see [Removing a pack](#removing-a-pack) |
 | `console <command>` | send a command to the server's console, like `cs console status`, and print its reply (what the server prints until it's quiet for half a second) |
+| `maps` | what this server has from the packs: the map cycle, and the pack plugins in `plugins.ini` |
 | `log [-f] [lines]` | the last lines the container printed (100): the server, `[packs]`, `[hltv]`, `[demos]`. `-f` follows. Kept in the container, in `/tmp/console.log` (its last 2 MB once it passes 8 MB), since `podman logs` has only what journald still keeps |
 | `help` | this list |
 

@@ -11,8 +11,8 @@
 #   packs.sh autotags <name> <path>                       the tags cs save starts with
 #   podman exec <container> cs remove <pack or map>       delete a pack, and it from the tags
 #
-# data/packlist says which packs, in order; the first one wins a file two packs have. One
-# per line, # for comments:
+# data/packlist (or PACKLIST in the environment, which wins) says which packs, in order;
+# the first one wins a file two packs have. One per line, # for comments:
 #   default        the maps CS ships with (kept in the image)
 #   mypack         packs/mypack in the library, yours: a dir laid out like cstrike, or an
 #                  archive (mypack.zip, .rar, .7z), a .bsp, .sma or .amxx
@@ -128,7 +128,14 @@ lock() {
 }
 [ -n "$READONLY" ] || [ "${1:-}" = save ] || lock
 
-if [ -z "$READONLY" ] && [ ! -f "$LIST" ]; then
+# PACKLIST in the environment, when it's set, is the packlist instead of data/packlist
+LISTNAME=data/packlist
+if [ -n "${PACKLIST:-}" ]; then
+	printf '%s\n' "$PACKLIST" >"$TMP/packlist"
+	[ -f "$LIST" ] && [ -z "$READONLY" ] && [ -n "$(sed 's/#.*//' "$LIST" | tr -d ' \t\n')" ] &&
+		say "PACKLIST is set: data/packlist isn't used"
+	LIST=$TMP/packlist LISTNAME=PACKLIST
+elif [ -z "$READONLY" ] && [ ! -f "$LIST" ]; then
 	cat >"$LIST" <<-'EOF'
 	# The packs this server uses, in order: the first one wins a file two packs have.
 	# After editing: podman exec <container> cs reload   (new maps work from the next map change)
@@ -997,7 +1004,7 @@ if [ "${1:-}" = save ]; then
 	if [ -n "$fetched" ]; then
 		say "  use it by name in a packlist or the tags file: $name"
 	else
-		say "  in data/packlist, replace the URL with $name: the download goes on the next cs reload"
+		say "  in $LISTNAME, replace the URL with $name: the download goes on the next cs reload"
 	fi
 	# For cs save -t and -r: the pack's name and its path in packs/
 	printf '%s\t%s\n' "$name" "$rel"
@@ -1255,7 +1262,7 @@ $u"
 		# Names this server's packlist uses for it
 		set -f
 		for w in $(sed 's/#.*//' "$LIST"); do
-			case " $(lower "$n $r $maps") " in *" $(lower "$w") "*) say "  data/packlist names it ($w): take that out too" ;; esac
+			case " $(lower "$n $r $maps") " in *" $(lower "$w") "*) say "  $LISTNAME names it ($w): take that out too" ;; esac
 		done
 		set +f
 		[ -z "$SHARED" ] || say "  the library is shared: servers that use it lose it at their next reload"

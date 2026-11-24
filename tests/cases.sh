@@ -130,6 +130,19 @@ case_first_wins() {
 	file models/m.mdl && points maps/shared.bsp packs/p1/
 }
 
+case_packlist_env() {
+	fresh
+	mkdir -p $D/packs/plugins && sma $D/packs/plugins/foo.sma
+	bsp $D/packs/maps/de_a.bsp && bsp $D/packs/maps/de_b.bsp
+	packlist default
+	PACKLIST='de_a  # a comment
+plugins/foo' packs || fail "packs.sh failed"
+	link maps/de_a.bsp && nolink maps/de_b.bsp && nolink maps/de_dust2.bsp
+	logs "PACKLIST is set: data/packlist isn't used"
+	$H/cs.sh maps >$T/log 2>&1
+	logs "  de_a" && logs "  foo.amxx"
+}
+
 case_url() {
 	fresh
 	bsp $FX/u/maps/de_url.bsp && zipdir $FX/de_url.zip $FX/u
