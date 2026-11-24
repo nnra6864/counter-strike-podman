@@ -79,15 +79,13 @@ The preset itself stays in the repo, so `git pull` brings its updates.
 ### Updating
 
 ```sh
-git pull
-git submodule update --init
-podman compose build
-podman compose up -d --force-recreate
+git pull --recurse-submodules
+./cs up
 ```
 
-`git pull` alone doesn't update the submodules (`git config submodule.recurse true` makes it).
+`git pull` alone doesn't update the submodules (`--recurse-submodules` does, or `git config submodule.recurse true` once). A submodule added since needs `git submodule update --init`.
 
-`--force-recreate` because podman-compose doesn't notice a new image or a changed env file on its own, and would keep the old container.
+`./cs up` builds the image and recreates the container: `podman compose up -d --build --force-recreate`, plus tags for the two build stages that take long. `--force-recreate` because podman-compose doesn't notice a new image or a changed env file on its own, and would keep the old container. The tags because an untagged stage is a dangling image, which `podman image prune` deletes: the next build would download CS through SteamCMD again (half an hour). They're `localhost/counter-strike-cache:steam` and `:demo-tools`.
 
 ### More than one server
 
@@ -513,6 +511,8 @@ podman attach counter-strike
 
 Or `./cs attach` in the clone. To send a single command without attaching, use `cs console` (below), which prints the reply.
 
+`./cs` alone (or `podman exec -it counter-strike cs`) is the console with tab completion: the server's commands and cvars, the maps, and `cs` with its commands. Up and down go through the history (kept in `data/.cs_history`), and what the server prints shows up as it comes. `cs <command>` runs the commands below (`cs reload`, `cs save ...`, with the pickers). `exit`, `quit` or ctrl-d leave it, and the server keeps running. In `podman exec -it counter-strike bash`, `cs` tab completes too.
+
 ## Commands
 
 `cs` runs in the container, for what you'd otherwise restart it for:
@@ -535,6 +535,7 @@ podman exec counter-strike cs <command>
 | `console <command>` | send a command to the server's console, like `cs console status`, and print its reply (what the server prints until it's quiet for half a second) |
 | `maps` | what this server has from the packs: the map cycle, and the pack plugins in `plugins.ini` |
 | `log [-f] [lines]` | the last lines the container printed (100): the server, `[packs]`, `[hltv]`, `[demos]`. `-f` follows. Kept in the container, in `/tmp/console.log` (its last 2 MB once it passes 8 MB), since `podman logs` has only what journald still keeps |
+| (none) | on a terminal: the console with tab completion and history, see [Console](#console) |
 | `help` | this list |
 
 Settings from environment variables still need the container recreated (`podman compose up -d`).
