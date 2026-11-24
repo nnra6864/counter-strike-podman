@@ -15,7 +15,7 @@ fi
 
 rc=0
 if command -v shellcheck >/dev/null; then
-	shellcheck -S warning image/scripts/*.sh tests/*.sh || rc=1
+	shellcheck -S warning image/scripts/*.sh image/scripts/lib/*.sh tests/*.sh cs || rc=1
 fi
 
 podman run --rm --network none --entrypoint sh \
