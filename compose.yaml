@@ -39,3 +39,6 @@ services:
     # MAXPLAYERS and MAP. Everything else is a cvar
     build:
       context: image
+    # One name for every clone, so they share one image and one build (only one server
+    # runs at a time: they all use port 27015)
+    image: localhost/counter-strike:latest
