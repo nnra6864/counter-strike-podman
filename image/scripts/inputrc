@@ -1,0 +1,13 @@
+# Readline for cs's console (rlwrap, scripts/cs.sh)
+$include /etc/inputrc
+set completion-ignore-case on
+set bell-style none
+# Tab puts in the first match, tab again the next (shift-tab back), instead of listing them
+TAB: menu-complete
+"\e[Z": menu-complete-backward
+set menu-complete-display-prefix off
+# Up and down: the history lines that start with what's typed
+"\e[A": history-search-backward
+"\e[B": history-search-forward
+"\eOA": history-search-backward
+"\eOB": history-search-forward

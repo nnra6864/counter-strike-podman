@@ -510,7 +510,7 @@ podman attach counter-strike
 
 Or `./server attach` in the clone. To send a single command without attaching, use `cs console` (below), which prints the reply.
 
-`./server` alone (or `podman exec -it counter-strike cs`) is the console with tab completion: the server's commands and cvars, the maps, and `cs` with its commands. Up and down go through the history (kept in `data/.cs_history`), and what the server prints shows up as it comes. `cs <command>` runs the commands below (`cs reload`, `cs save ...`, with the pickers). `exit`, `quit` or ctrl-d leave it, and the server keeps running. In `podman exec -it counter-strike bash`, `cs` tab completes too.
+`./server` alone (or `podman exec -it counter-strike cs`) is the console: the server's commands (`changelevel de_dust2`, `status`, any cvar) and ours (`reload`, `save ...`, `maps`, below, with the pickers) at one prompt, `help` for ours. Tab completes them and the maps, and tab again puts in the next match. Up and down go through the history lines that start with what's typed (kept in `data/.cs_history`). What the server prints shows up as it comes. `clear` clears it, `exit`, `quit` or ctrl-d leave, and the server keeps running. Where our names and the server's meet (`maps`, `reload`, `log`), ours win: `console maps` sends the server's. In `podman exec -it counter-strike bash`, `cs` tab completes too.
 
 ## Commands
 
@@ -542,7 +542,8 @@ The container's `cs`:
 | `tags` | every tag and what has it, and names in the tags file that match nothing, see [Tags](#tags) |
 | `save [-r] [-t tags] <URL> [dir]` | download a map or plugin into `packs/`, as a zip with its URL, see [Where a pack came from](#where-a-pack-came-from). `save` alone lists the packlists' downloads, which can be saved by name. `-t snow,xmas` tags it (with `podman exec -it`, a picker instead), `-r` reloads after, see [Saving with tags](#saving-with-tags-and-a-reload) |
 | `remove [-r] [-y] <pack or map>` | delete a pack from `packs/` and take it out of the tags file, after asking, see [Removing a pack](#removing-a-pack) |
-| `console <command>` | send a command to the server's console, like `cs console status`, and print its reply (what the server prints until it's quiet for half a second) |
+| `<server command>` | anything that isn't one of these goes to the server's console and its reply is printed (what the server prints until it's quiet for half a second): `cs changelevel de_dust2`, `./server status` |
+| `console <command>` | the same, for the server's commands that have our names: `maps`, `reload`, `log` |
 | `maps` | what this server has from the packs: the map cycle, and the pack plugins in `plugins.ini` |
 | `log [-f] [lines]` | the last lines the container printed (100): the server, `[packs]`, `[hltv]`, `[demos]`. `-f` follows. Kept in the container, in `/tmp/console.log` (its last 2 MB once it passes 8 MB), since `podman logs` has only what journald still keeps |
 | (none) | on a terminal: the console with tab completion and history, see [Console](#console) |

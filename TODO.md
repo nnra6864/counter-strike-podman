@@ -92,6 +92,9 @@ Taken care of on 2026-11-24, see git log. Left:
 - [x] `cs` alone on a terminal (`./server` on the host): the console through rlwrap, with tab completion (commands, cvars, maps, `cs` and its commands), history in `data/.cs_history`, the server's output as it comes, the pickers working inside it. `cs` tab completes in the container's bash (2026-11-24)
 - [x] `cs maps` one map per line, in cycle order (2026-11-24)
 - [x] A usage mistake says what's wrong in one line instead of printing the whole help (2026-11-24)
+- [x] One prompt for the server's commands and ours, without `cs` in front; `./server changelevel x` and other server commands from outside too. Tab cycles through the matches in place, up/down search the history by prefix (`inputrc`) (2026-11-24)
+- [ ] **Next:** the console as a Zig binary with replxx (C++, builds with Zig): fish-like completion menu with descriptions, grey inline suggestions from the history, server output printed above the line being typed without breaking it. Our commands still run the sh scripts, so it doesn't wait for the rewrite below
+- [ ] fish completions for `./server` on the host (`complete -p '*/server'`), from the container's word list
 - [ ] Completion that knows its place: maps only after `changelevel`/`map`/`amx_map`/`votemap`, a cvar's value after the cvar, packs after `cs remove`. rlwrap completes from one word list, so this needs our own line editor
 - [ ] Rewrite `cs` in Zig (it already builds `goldsrc-demo-tools`): its own line editor with that completion, and the packs logic out of awk and sh. Big: `packs.sh` and its awk are ~1,500 lines with 16 test cases to keep passing
 - [ ] Web UI: status, players, map change, the console, packs and tags. Behind angie, NetBird only. After the Zig rewrite, served by it

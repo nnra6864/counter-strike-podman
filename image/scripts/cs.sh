@@ -3,10 +3,14 @@
 #
 #   podman exec <container> cs <command>
 #
-#   (none)               on a terminal (podman exec -it, or ./server on the host): the server's
-#                        console, with tab completion (commands, cvars, maps), history
-#                        and line editing. cs <command> runs these; exit or ctrl-d leaves
-#                        (quit too: it doesn't stop the server in here)
+#   (none)               on a terminal (podman exec -it, or ./server on the host): the
+#                        console. These commands and the server's (changelevel, status,
+#                        any cvar) at one prompt, tab completing them and the maps (tab
+#                        again: the next match), up/down: history starting with what's
+#                        typed. clear, and exit, quit or ctrl-d to leave (the server keeps
+#                        running)
+#   <server command>     anything that isn't one of these goes to the server's console,
+#                        its reply printed: cs changelevel de_dust2, cs status
 #   reload [--now] [-v]  link the packs again after editing data/packlist or the tags file:
 #                        maps, plugins, FastDL, the map cycle, and apply the environment to
 #                        the configs again. New maps and plugins work from the next map
@@ -30,7 +34,8 @@
 #                        -r: then reload, so this server drops it now
 #   maps                 what this server has from the packs: the map cycle, and the
 #                        plugins in plugins.ini
-#   console <command>    send a command to the server's console, and print its reply
+#   console <command>    the same, for the server's commands with our names: maps,
+#                        reload, log, help
 #   log [-f] [lines]     the last lines the container printed (100), -f to follow
 
 FIFO=/tmp/server.in
@@ -212,13 +217,13 @@ shell() {
 	[ -p "$FIFO" ] || { echo "cs: the server isn't running ($FIFO is missing)" >&2 && exit 1; }
 	command -v rlwrap >/dev/null || { echo "cs: no rlwrap in this image: rebuild it" >&2 && exit 1; }
 	words
-	say "the server's console: tab completes, up/down for history, cs <command> for ours"
-	say "  (cs help), exit or ctrl-d to leave"
+	say "the console: the server's commands and ours (help), tab completes, exit leaves"
 	# A fresh pty (podman exec -it) can say it's 0 wide, which rlwrap refuses
 	case $(stty size 2>/dev/null) in '' | 0\ * | *\ 0) stty rows 24 cols 80 2>/dev/null ;; esac
 	# Word breaks without - and +: they're in map names and commands. -b before -f.
 	# -n: no warning when a picker takes single keys
-	exec rlwrap -n -i -b "(){}[],'=&^%\$#@\"\\;:" -f "$WORDS" -H "$HIST" -s 2000 -S 'cs> ' "$0" shell-inner
+	# Tab cycles through the matches in place, up/down search the history
+	INPUTRC=/opt/hlds/inputrc exec rlwrap -n -i -b "(){}[],'=&^%\$#@\"\\;:" -f "$WORDS" -H "$HIST" -s 2000 -S 'cs> ' "$0" shell-inner
 }
 
 shell_inner() {
@@ -231,17 +236,20 @@ shell_inner() {
 		# shellcheck disable=SC2086 # split into words
 		set -- $line
 		set +f
+		# cs in front changes nothing
+		if [ "${1:-}" = cs ]; then
+			shift
+			line=$*
+		fi
 		case ${1:-} in
 		'') ;;
 		exit | quit | logout) break ;;
-		cs)
-			shift
-			case ${1:-} in
-			console) shift && printf '%s\n' "$*" >"$FIFO" ;;
-			'' | shell | log) say "not in here: cs help for the rest" ;;
-			*) "$0" "$@" ;;
-			esac
-			;;
+		clear) printf '\033[H\033[2J' ;;
+		help | -h | --help) usage 2>&1 ;;
+		reload | save | remove | tags | maps) "$0" "$@" ;;
+		# The server's own, here: what the log shows is its reply
+		console) shift && printf '%s\n' "$*" >"$FIFO" ;;
+		shell | log) say "$1: not in here" ;;
 		*) printf '%s\n' "$line" >"$FIFO" ;;
 		esac
 	done
@@ -301,6 +309,7 @@ shell-inner) shell_inner ;;
 words) words && cat "$WORDS" ;;
 help | -h | --help) usage ;;
 *)
-	bad "no command $cmd"
+	# The server's: changelevel, status, a cvar
+	console "$cmd" "$@"
 	;;
 esac
