@@ -9,6 +9,18 @@ How it was checked:
 - Benchmarked `packs.sh` in a throwaway container from the live image (`--network none`), with a copy of the shared library in the scratchpad. Nothing live was changed. The only thing run against the live server was a read-only `cs tags`.
 - Read the live state: `counter-strike-NnCompetitive`'s `cstrike/`, the shared library at `/tank/services/counter-strike`, the replay dirs, and the podman images.
 
+## Status (2026-11-24, later that day)
+
+Done, each in its own commit (`git log c4569ed..`), with `tests/run.sh` (16 cases) passing:
+
+- §1.1 password masked, every HLTV value quoted · §1.2/§2.1 link diff (2,000 files: 8.3 s / 5.1 s → 0.18 s / 0.1 s; the real library gives the same result as before) · §1.3 lock · §1.4 `settings.sh`, `cs reload` applies the environment · §1.5 `-name` for packs, warns on no match · §1.6 compile key, failed builds remembered · §1.7 gamedata synced · §1.8 nested archives indexed, failed `.sma` not retried, `demos.sh` supervised, stray files in `packs/` warned about, read-only commands write nothing, 2 GB download cap, `*` documented
+- §2.2 fewer forks in the index, regexes cached, zip comments cached, `demos.sh` one awk per poll, `env-config` skips `demos/` and `logs/` · §2.3 one image name in compose
+- §3.1 `./cs` · §3.2 `cs console` prints the reply, `cs log` · §3.3 cause found: the user journal is capped at ~50 MB and other containers rotate it within hours; `cs log` doesn't depend on it · §3.4 reload summary (`-v`), `cs tags` wrapped, `cs maps` · §3.5 `PACKLIST` · §3.6 one picker (and a fix for a terminal that reports 0 columns)
+- §4.1 awk programs in `lib/`, downloads in `lib/fetch.sh` (`packs.sh` 1,581 → about 1,070 lines) · §4.2 one tags-file parser, `on`/`lower`/`write_in_place` in `common.sh` · §4.3 legacy listed in `TODO.md` §7 · §4.4 the test harness · §4.5 save's output documented, SC2115, `update-ca-certificates`
+- §6 HLTV docs, `packs.sh` header, `~/Containers/AGENTS.md`
+
+Left (see `TODO.md` §8): §5 checksums and base image pins, and §2.3 trimming `valve/` (both need a rebuild and a test start), removing the orphaned image, `hltv_tools` writing only on change and the "demo finished" check in `goldsrc-demo-tools` (other repos), and moving the packs docs out of the README (§6).
+
 Priorities: **P1** fix soon, **P2** worth doing, **P3** when you're in there anyway. Effort: **S** under an hour, **M** an evening, **L** more than that.
 
 ---
