@@ -477,7 +477,9 @@ exclude_units() {
 # is given) as a zip with its URL in the comment. A URL is downloaded for it, unless a
 # packlist has downloaded it already; a download a packlist has can then be named there
 # by name instead of by URL. A zip as it came; a .rar or .7z as a zip of the same files.
-# Downloads themselves aren't changed: GameBanana's checksum is of them as they came
+# Downloads themselves aren't changed: GameBanana's checksum is of them as they came.
+# Its output, for cs.sh: one line, <name> <tab> <path in packs/>, on stdout; everything
+# else goes to stderr
 
 if [ "${1:-}" = save ]; then
 	arg=${2:-}
@@ -583,7 +585,8 @@ if [ "${1:-}" = save ]; then
 			;;
 		esac
 	else
-		# Downloaded before packs kept the file: a zip of what was unpacked
+		# Downloaded before packs kept the file (2026-11-19). Legacy: remove once no
+		# library has a download without .original/
 		(cd "$d" && LC_ALL=C.UTF-8 bsdtar --format zip -cf "$tmp" -- *) || exit 1
 		say "$name: the file as it was downloaded isn't kept, saving a zip of its contents"
 	fi
@@ -676,8 +679,7 @@ if [ "${1:-}" = tag ]; then
 		awk -v n="$name" -v t="$t" -f "$LIBDIR/tagsfile.awk" -f "$LIBDIR/tag.awk" "$TAGS" >"$TMP/tags.new" || rc=$?
 		case $rc in
 		0)
-			# Written over, not replaced: the file keeps its owner and mode
-			cat "$TMP/tags.new" >"$TAGS"
+			write_in_place "$TMP/tags.new" "$TAGS"
 			say "tagged $name: $t"
 			;;
 		3) say "$name has tag $t already" ;;
@@ -748,7 +750,7 @@ $u"
 	printf '%s\n' "$files" | while IFS= read -r u; do rm -rf -- "$u"; done
 	say "removed packs/$rel"
 	if [ -s "$TMP/tagrep" ]; then
-		cat "$TMP/tags.new" >"$TAGS"
+		write_in_place "$TMP/tags.new" "$TAGS"
 		t=$(cut -f 1 "$TMP/tagrep" | sort -u | tr '\n' ' ')
 		say "  and from the tags file: ${t% }"
 	fi
@@ -868,6 +870,8 @@ fi
 # server has don't go missing while it runs
 TAB=$(printf '\t')
 
+# Legacy (default pack since 2026-11-19): remove once every volume has run this (it runs on every start, a find and a cmp
+# per default map file):
 # Volumes made before the default pack have its maps as files in cstrike: remove them where
 # they're the same as the image's, so the default pack (or leaving it out) decides
 # The same file, or a text file (.txt, .res) that only has other line endings (older
@@ -1036,7 +1040,7 @@ done <"$TMP/xnames"
 # did to them (AMXX_PLUGIN_<NAME>). A plugin plugins.ini lists elsewhere stays there
 if [ -n "$amxx_ok" ]; then
 	awk -v wantfile="$TMP/plugins" -f "$LIBDIR/pluginsini.awk" "$PLUGINS_INI" >"$TMP/plugins.ini"
-	cmp -s "$TMP/plugins.ini" "$PLUGINS_INI" || cat "$TMP/plugins.ini" >"$PLUGINS_INI"
+	write_in_place "$TMP/plugins.ini" "$PLUGINS_INI"
 	n=$(sort -u "$TMP/plugins" | grep -c .) || true
 	[ "$n" = 0 ] || say "plugins: $n in addons/amxmodx/configs/plugins.ini"
 fi

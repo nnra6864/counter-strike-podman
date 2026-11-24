@@ -28,7 +28,7 @@ sync_file() {
 	[ -f "$1" ] || return 0
 	cmp -s "$1" "$2" && return 0
 	mkdir -p "$(dirname "$2")"
-	cat "$1" >"$2"
+	write_in_place "$1" "$2"
 	say "updated ${2#"$GAME"/}"
 }
 

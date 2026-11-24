@@ -8,4 +8,7 @@ on() {
 	esac
 	return 1
 }
+# Puts file $1's contents in file $2, if they differ. Written over, not replaced: $2 keeps
+# its owner, mode and SELinux label
+write_in_place() { cmp -s "$1" "$2" || cat "$1" >"$2"; }
 lower() { printf %s "$1" | tr '[:upper:]' '[:lower:]'; }

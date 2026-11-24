@@ -70,3 +70,19 @@ From the source: ReHLTV writes every `svc_voicedata` it gets into the demo (`Dem
 - [x] `autotags` file next to the tags file: `[tag.X] de_* *snow*` patterns for a pack's name or its maps give the tags `cs save` starts with (ticked in the picker, used as they are without a terminal). Written once with defaults for the usual prefixes; after that only the file counts (2026-11-23)
 - [x] `cs remove [-r] [-y] <pack or map>`: deletes the pack and its mentions in the tags file, after showing them and asking (2026-11-20)
 - [x] ~~A competitive map pool for `presets/competitive.env`~~: not needed, a competitive server's packlist says `@competitive` and the tags file holds the pool (2026-11-19)
+
+## 7. Legacy code to remove
+
+Migrations for old volumes and libraries, which run on every start. Delete each once every volume and library has been through it.
+
+- [ ] `packs.sh`: default maps as files in `cstrike/maps` moved to the default pack (since 2026-11-19; a `find` and a `cmp` per default map file on every start)
+- [ ] `settings.sh`: an old `hltv_voice` line in `plugins.ini` turned off (`hltv_tools` since 2026-11-19)
+- [ ] `packs.sh save`: a download without `.original/` (from before 2026-11-19) saved as a zip of what was unpacked
+
+## 8. Audit (2026-11-24, `AUDIT.md`)
+
+Taken care of on 2026-11-24, see git log. Left:
+
+- [ ] Image (needs a rebuild and a test start): checksums for every download, base images pinned by digest (and trixie instead of bookworm), the HL1 campaign maps and music out of `valve/`
+- [ ] `hltv_tools` writes the player count only when it changes (in the hltv-tools repo)
+- [ ] "Demo finished" (the header's directory offset, `od -j 540`) in `goldsrc-demo-tools` (`info --finished`), used by `hltv.sh` and `demos.sh`
