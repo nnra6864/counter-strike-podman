@@ -522,7 +522,7 @@ podman exec counter-strike cs <command>
 ./cs <command>        # the same, from the clone: finds its container, and passes on the terminal
 ```
 
-`./cs` uses `podman exec -it` when it's run on a terminal, so the pickers and `cs remove`'s question work without remembering `-it`. It also has the host's side: `./cs up` (`podman compose up -d --force-recreate`), `./cs build` and `./cs attach`.
+`./cs` uses `podman exec -it` when it's run on a terminal, so the pickers and `cs remove`'s question work without remembering `-it`. It also has the host's side: `./cs up` (`podman compose up -d --build --force-recreate`: podman-compose recreates the container only when `compose.yaml` changes, not for a new image or an edited env file), `./cs build` and `./cs attach`.
 
 | Command | |
 |---|---|

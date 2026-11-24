@@ -83,6 +83,6 @@ Migrations for old volumes and libraries, which run on every start. Delete each 
 
 Taken care of on 2026-11-24, see git log. Left:
 
-- [ ] Image (needs a rebuild and a test start): checksums for every download, base images pinned by digest (and trixie instead of bookworm), the HL1 campaign maps and music out of `valve/`
-- [ ] `hltv_tools` writes the player count only when it changes (in the hltv-tools repo)
+- [x] Image: checksums for every download, base images pinned by digest, trixie instead of bookworm, the HL1 campaign maps and music, `linux64/` and SteamCMD's leftovers out (1.22 GB → 840 MB). Built, tests pass, a start with HLTV and a map change work (2026-11-24)
+- [ ] `hltv_tools` (in the hltv-tools repo): writes the player count only when it changes. And HLTV counts as a player when it connects (`get_players` "chi" 0.1 s after `client_connect`, before it's flagged as HLTV), so every server start begins a recording nobody needs, stopped after `RECORD_IDLE_STOP`
 - [ ] "Demo finished" (the header's directory offset, `od -j 540`) in `goldsrc-demo-tools` (`info --finished`), used by `hltv.sh` and `demos.sh`

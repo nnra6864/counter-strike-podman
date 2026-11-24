@@ -1,6 +1,8 @@
 # Stage 1: CS 1.6 itself, via SteamCMD. Nearly all of the server's size, and it never changes,
-# so the runtime stage copies it in a layer of its own that stays cached
-FROM docker.io/cm2network/steamcmd:latest AS steam
+# so the runtime stage copies it in a layer of its own that stays cached.
+# Base images are pinned by digest, so a rebuild gets the same ones: bump them on purpose
+# (podman pull <image>, then podman image inspect <image> --format '{{.Digest}}')
+FROM docker.io/cm2network/steamcmd:latest@sha256:45f6515d6c4dcde659c9ad6872bdbeacd1bf5c4e7f241829c4d2f28fb5eda581 AS steam
 
 WORKDIR /opt/hlds
 
@@ -17,6 +19,11 @@ RUN /home/steam/steamcmd/steamcmd.sh \
     # Using pre-aniversary build of HLDS as that's what ReHLDS supports
     +app_update 90 -beta steam_legacy validate \
     +quit
+
+# What a cstrike server doesn't use: Half-Life's campaign maps and soundtrack, the 64-bit
+# Steam libraries (HLDS is 32-bit) and SteamCMD's leftovers. In its own step, so the
+# download above stays cached
+RUN rm -rf valve/maps valve/media linux64 steamapps/downloading steamapps/temp
 
 # HLDS looks for steamclient.so in ~/.steam/sdk32
 # The base image only symlinks it to steamcmd/linux32, which won't exist in the runtime stage
@@ -60,6 +67,15 @@ ARG REGAMEDLL_VER=5.30.0.814
 ARG REAPI_VER=5.29.0.358
 ARG METAMOD_VER=1.3.0.149
 ARG AMXX_VER=1.10.0-git5474
+# sha256 of each download, so a moved or replaced release fails the build. ReHLDS, ReGameDLL
+# and ReAPI match the digests GitHub lists for the release; Metamod-r and AMX Mod X publish
+# none, so theirs are of the files as downloaded on 2026-11-24
+ARG REHLDS_SHA256=997baeb7ef3842dab3e034d82dc651ebfe560c23b158adce660a6b97976b4e2b
+ARG REGAMEDLL_SHA256=457f5c96a4d10280fcad47f106cbd5be86363a47df1ccab91c514e9d1bc6fd18
+ARG REAPI_SHA256=f33a7435540bea8706db3fa948e51a85b511f5b18c383b97402a204dc5419195
+ARG METAMOD_SHA256=ede7f59c4e0220afe8c02aa348a130cce527f87d36ffdb674e37a501ce57be94
+ARG AMXX_BASE_SHA256=4b8178c09291e787aea7cd52603f49de197997935613cab5e63f153af33545ca
+ARG AMXX_CSTRIKE_SHA256=479f7ef264a0ade6accaedbf6c69980d657a669f5a6c8542990457ab82ab0206
 
 # Everything the steps below create, overwrite or chmod gets a newer change time than this
 # (unlike the modification time, unzip, tar and cp -p can't set it back), see the last step
@@ -67,12 +83,14 @@ RUN touch /tmp/addons-start
 
 # Download and install ReHLDS
 RUN wget https://github.com/rehlds/ReHLDS/releases/download/${REHLDS_VER}/rehlds-bin-${REHLDS_VER}.zip && \
+    echo "${REHLDS_SHA256}  rehlds-bin-${REHLDS_VER}.zip" | sha256sum -c - && \
     unzip -q rehlds-bin-${REHLDS_VER}.zip && \
     cp -r bin/linux32/* ./ && \
     rm -rf rehlds-bin-${REHLDS_VER}.zip bin
 
 # Download and install ReGameDLL
 RUN wget https://github.com/rehlds/ReGameDLL_CS/releases/download/${REGAMEDLL_VER}/regamedll-bin-${REGAMEDLL_VER}.zip && \
+    echo "${REGAMEDLL_SHA256}  regamedll-bin-${REGAMEDLL_VER}.zip" | sha256sum -c - && \
     mkdir -p /tmp/regamedll-bin dist/regamedll && \
     unzip -q regamedll-bin-${REGAMEDLL_VER}.zip -d /tmp/regamedll-bin && \
     cp -r /tmp/regamedll-bin/bin/linux32/cstrike/* cstrike_defaults/ && \
@@ -84,6 +102,7 @@ RUN cd cstrike_defaults/dlls && ln -s cs.so cs_i386.so
 
 # Download and install Metamod-r
 RUN wget https://github.com/rehlds/Metamod-r/releases/download/${METAMOD_VER}/metamod-bin-${METAMOD_VER}.zip && \
+    echo "${METAMOD_SHA256}  metamod-bin-${METAMOD_VER}.zip" | sha256sum -c - && \
     mkdir -p /tmp/metamod-bin && \
     unzip -q metamod-bin-${METAMOD_VER}.zip -d /tmp/metamod-bin && \
     cp -r /tmp/metamod-bin/addons cstrike_defaults/ && \
@@ -93,6 +112,8 @@ RUN wget https://github.com/rehlds/Metamod-r/releases/download/${METAMOD_VER}/me
 # Download and install AMX Mod X
 RUN wget https://www.amxmodx.org/amxxdrop/1.10/amxmodx-${AMXX_VER}-base-linux.tar.gz && \
     wget https://www.amxmodx.org/amxxdrop/1.10/amxmodx-${AMXX_VER}-cstrike-linux.tar.gz && \
+    printf '%s  %s\n' "${AMXX_BASE_SHA256}" amxmodx-${AMXX_VER}-base-linux.tar.gz \
+        "${AMXX_CSTRIKE_SHA256}" amxmodx-${AMXX_VER}-cstrike-linux.tar.gz | sha256sum -c - && \
     tar -xzf amxmodx-${AMXX_VER}-base-linux.tar.gz -C cstrike_defaults/ && \
     tar -xzf amxmodx-${AMXX_VER}-cstrike-linux.tar.gz -C cstrike_defaults/ && \
     echo 'linux addons/amxmodx/dlls/amxmodx_mm_i386.so' > cstrike_defaults/addons/metamod/plugins.ini && \
@@ -100,6 +121,7 @@ RUN wget https://www.amxmodx.org/amxxdrop/1.10/amxmodx-${AMXX_VER}-base-linux.ta
 
 # Download and install ReAPI
 RUN wget https://github.com/rehlds/ReAPI/releases/download/${REAPI_VER}/reapi-bin-${REAPI_VER}.zip && \
+    echo "${REAPI_SHA256}  reapi-bin-${REAPI_VER}.zip" | sha256sum -c - && \
     unzip -q reapi-bin-${REAPI_VER}.zip -d cstrike_defaults/ && \
     rm reapi-bin-${REAPI_VER}.zip
 
@@ -162,16 +184,18 @@ RUN --mount=type=bind,from=steam,source=/opt/hlds,target=/base \
 
 # Stage 3: goldsrc-demo-tools: repairs demos, tells who joined, writes their voice to a .mka
 # (see scripts/hltv.sh and scripts/demos.sh)
-FROM debian:bookworm-slim AS demo-tools
+FROM docker.io/library/debian:trixie-slim@sha256:ab3b3c8c5159eebfca4376430132d53c4d425f869c765ecbe47177a030da575d AS demo-tools
 
 ARG ZIG_VER=0.17.1
+# From ziglang.org/download/index.json
+ARG ZIG_SHA256=3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a
 ARG OPUS_VER=1.6.1
 ARG OPUS_SHA256=6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates curl xz-utils gcc make libc6-dev pkgconf && \
     rm -rf /var/lib/apt/lists/*
-# libopus from source, linked statically: bookworm's 1.3.1 decodes quiet stretches a little
+# libopus from source, linked statically: Debian's older libopus (bookworm's 1.3.1) decodes quiet stretches a little
 # differently from the 1.6.1 the tool is tested with, enough to fail its speech timing tests
 RUN curl -fsSL -o /tmp/opus.tar.gz https://downloads.xiph.org/releases/opus/opus-${OPUS_VER}.tar.gz && \
     echo "${OPUS_SHA256}  /tmp/opus.tar.gz" | sha256sum -c - && \
@@ -179,7 +203,9 @@ RUN curl -fsSL -o /tmp/opus.tar.gz https://downloads.xiph.org/releases/opus/opus
     ./configure -q --prefix=/usr/local --disable-shared --disable-doc --disable-extra-programs && \
     make -s -j"$(nproc)" install && \
     cd / && rm -rf /tmp/opus*
-RUN curl -fsSL https://ziglang.org/download/${ZIG_VER}/zig-x86_64-linux-${ZIG_VER}.tar.xz | tar -xJ -C /opt && \
+RUN curl -fsSL -o /tmp/zig.tar.xz https://ziglang.org/download/${ZIG_VER}/zig-x86_64-linux-${ZIG_VER}.tar.xz && \
+    echo "${ZIG_SHA256}  /tmp/zig.tar.xz" | sha256sum -c - && \
+    tar -xJf /tmp/zig.tar.xz -C /opt && rm /tmp/zig.tar.xz && \
     ln -s /opt/zig-x86_64-linux-${ZIG_VER}/zig /usr/local/bin/zig
 # tools/goldsrc-demo-tools is a git submodule. The tests check voice placement against the
 # reference fixtures, with this libopus
@@ -195,7 +221,7 @@ RUN --mount=type=cache,target=/zig-cache \
 
 
 # Stage 4: minimal runtime
-FROM debian:bookworm-slim AS runtime
+FROM docker.io/library/debian:trixie-slim@sha256:ab3b3c8c5159eebfca4376430132d53c4d425f869c765ecbe47177a030da575d AS runtime
 
 # curl, jq and bsdtar (libarchive-tools: zip, rar, 7z) download packs, zip and unzip read and
 # write the URL in a zip's comment, see scripts/packs.sh

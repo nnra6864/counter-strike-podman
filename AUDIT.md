@@ -19,7 +19,9 @@ Done, each in its own commit (`git log c4569ed..`), with `tests/run.sh` (16 case
 - §4.1 awk programs in `lib/`, downloads in `lib/fetch.sh` (`packs.sh` 1,581 → about 1,070 lines) · §4.2 one tags-file parser, `on`/`lower`/`write_in_place` in `common.sh` · §4.3 legacy listed in `TODO.md` §7 · §4.4 the test harness · §4.5 save's output documented, SC2115, `update-ca-certificates`
 - §6 HLTV docs, `packs.sh` header, `~/Containers/AGENTS.md`
 
-Left (see `TODO.md` §8): §5 checksums and base image pins, and §2.3 trimming `valve/` (both need a rebuild and a test start), removing the orphaned image, `hltv_tools` writing only on change and the "demo finished" check in `goldsrc-demo-tools` (other repos), and moving the packs docs out of the README (§6).
+§5 checksums, base image pins and trixie, and §2.3 trimming `valve/`: done 2026-11-24, image 1.22 GB → 840 MB.
+
+Left (see `TODO.md` §8): removing the old images, `hltv_tools` writing only on change and the "demo finished" check in `goldsrc-demo-tools` (other repos), and moving the packs docs out of the README (§6).
 
 Priorities: **P1** fix soon, **P2** worth doing, **P3** when you're in there anyway. Effort: **S** under an hour, **M** an evening, **L** more than that.
 
