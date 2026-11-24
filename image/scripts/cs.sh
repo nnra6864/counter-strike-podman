@@ -4,8 +4,9 @@
 #   podman exec <container> cs <command>
 #
 #   reload [--now]       link the packs again after editing data/packlist or the tags file:
-#                        maps, plugins, FastDL, the map cycle. New maps and plugins work from
-#                        the next map change; --now restarts the current map for that
+#                        maps, plugins, FastDL, the map cycle, and apply the environment to
+#                        the configs again. New maps and plugins work from the next map
+#                        change; --now restarts the current map for that
 #   tags                 every tag in the tags file and what has it, and names that match
 #                        nothing
 #   save [-r] [-t tags] <URL> [dir]
@@ -38,6 +39,14 @@ console() {
 		return 1
 	fi
 	printf '%s\n' "$*" >"$FIFO"
+}
+
+# The packs, then the environment, as on a start: a new pack plugin gets its
+# AMXX_PLUGIN_<NAME>, a config just copied from a pack its CVAR_s. settings.sh first, so
+# env-config.sh doesn't undo what the entrypoint derived (the map cycle, FastDL's URL)
+reload_all() {
+	"$PACKS" || return
+	(. /opt/hlds/settings.sh && /opt/hlds/env-config.sh)
 }
 
 save() {
@@ -98,7 +107,7 @@ save() {
 	fi
 
 	[ -n "$reload" ] || return 0
-	"$PACKS" || exit
+	reload_all || exit
 	# Did the packlist pick it: links into the pack (its dir, or its unpacked copy)
 	used='' maps=''
 	while IFS= read -r r; do
@@ -148,7 +157,7 @@ remove() {
 	fi
 	"$PACKS" remove "$what" || exit
 	if [ -n "$reload" ]; then
-		"$PACKS" || exit
+		reload_all || exit
 	else
 		say "this server has it until cs reload"
 	fi
@@ -164,7 +173,7 @@ reload)
 	'') ;;
 	*) usage && exit 1 ;;
 	esac
-	"$PACKS" || exit
+	reload_all || exit
 	if [ -n "$now" ]; then
 		echo "[cs] restarting the map" >&2
 		console restart

@@ -1,6 +1,6 @@
 #!/bin/sh
-# Picks which components the server loads. Sourced by the entrypoint on every start,
-# before env-config.sh, because it sets defaults for some of env-config's variables.
+# Puts the components the server loads in place. Sourced by the entrypoint on every start.
+# What follows from these settings for env-config.sh is worked out in settings.sh.
 #
 #   ENABLE_REGAMEDLL=1    ReGameDLL instead of the stock game dll
 #   ENABLE_METAMOD=1      Metamod-R
@@ -19,12 +19,8 @@ GAME=$HLDS/cstrike
 DEFAULTS=$HLDS/cstrike_defaults
 DIST=$HLDS/dist
 
-on() {
-	case $(printf %s "${1:-}" | tr '[:upper:]' '[:lower:]') in
-	1 | on | true | yes | enable | enabled) return 0 ;;
-	esac
-	return 1
-}
+# The ENABLE_ defaults, on(), and what loads: SETTINGS_AMXX, SETTINGS_VOICE
+. "$HLDS/settings.sh"
 say() { echo "[components] $*" >&2; }
 
 # Copies $1 over $2 when they differ. Writes in place to keep ownership and SELinux labels.
@@ -43,10 +39,6 @@ ensure_dir() {
 	cp -a "$DEFAULTS/$1" "$GAME/$1"
 	say "installed $1"
 }
-
-: "${ENABLE_REGAMEDLL:=1}" "${ENABLE_METAMOD:=1}" "${ENABLE_AMXMODX:=1}" "${ENABLE_HLTV:=0}"
-: "${ENABLE_HLTV_VOICE:=$ENABLE_HLTV}" "${ENABLE_VOICE_MKA:=$ENABLE_HLTV}"
-export ENABLE_REGAMEDLL ENABLE_METAMOD ENABLE_AMXMODX ENABLE_HLTV ENABLE_HLTV_VOICE ENABLE_VOICE_MKA
 
 # Game dll
 if on "$ENABLE_REGAMEDLL"; then dll=regamedll; else dll=stock; fi
@@ -72,59 +64,30 @@ fi
 say "liblist.gam loads $gamedll"
 
 # AMX Mod X (+ ReAPI, which ships as an AMXX module)
-amxx=0
-if on "$ENABLE_AMXMODX"; then
-	if on "$ENABLE_METAMOD"; then
-		amxx=1
-		ensure_dir addons/amxmodx
-		for f in "$DEFAULTS"/addons/amxmodx/dlls/*.so "$DEFAULTS"/addons/amxmodx/modules/*.so; do
-			sync_file "$f" "$GAME/${f#"$DEFAULTS"/}"
-		done
-	else
-		say "warning: ENABLE_AMXMODX needs ENABLE_METAMOD, not loading AMX Mod X"
-	fi
-fi
-if [ -f "$GAME/addons/metamod/plugins.ini" ]; then
-	# Handed to env-config.sh, unless set explicitly
-	if [ $amxx = 1 ]; then
-		: "${METAMOD_PLUGIN_AMXMODX:=addons/amxmodx/dlls/amxmodx_mm_i386.so}"
-	else
-		: "${METAMOD_PLUGIN_AMXMODX:=0}"
-	fi
-	export METAMOD_PLUGIN_AMXMODX
-fi
-[ $amxx = 1 ] && say "AMX Mod X: on" || say "AMX Mod X: off"
-
-# hltv_tools plugin: HLTV hears everyone (voice in demos), and the player count that
-# hltv.sh records by
-voice=0
-if on "$ENABLE_HLTV_VOICE"; then
-	if [ $amxx = 1 ] && on "$ENABLE_REGAMEDLL"; then
-		voice=1
-	else
-		say "warning: ENABLE_HLTV_VOICE needs ReGameDLL and AMX Mod X. Use CVAR_SV_ALLTALK=3 instead (spectators hear everyone)"
-	fi
-fi
-if [ $amxx = 1 ]; then
-	PLUGINS_INI=$GAME/addons/amxmodx/configs/plugins.ini
+if [ "$SETTINGS_AMXX" = 1 ]; then
+	ensure_dir addons/amxmodx
+	for f in "$DEFAULTS"/addons/amxmodx/dlls/*.so "$DEFAULTS"/addons/amxmodx/modules/*.so; do
+		sync_file "$f" "$GAME/${f#"$DEFAULTS"/}"
+	done
+	# Gamedata (offsets and signatures) belongs to the build, like the modules
+	find "$DEFAULTS/addons/amxmodx/data/gamedata" -type f 2>/dev/null | while IFS= read -r f; do
+		sync_file "$f" "$GAME/${f#"$DEFAULTS"/}"
+	done
+	# The hltv_tools plugin: HLTV hears everyone (voice in demos), and the player count
+	# that hltv.sh records by
 	sync_file "$DEFAULTS/addons/amxmodx/plugins/hltv_tools.amxx" "$GAME/addons/amxmodx/plugins/hltv_tools.amxx"
-	if on "$ENABLE_HLTV" || [ $voice = 1 ]; then
-		: "${AMXX_PLUGIN_HLTV_TOOLS:=1}" "${CVAR_HLTV_TOOLS_VOICE:=$voice}"
-		export AMXX_PLUGIN_HLTV_TOOLS CVAR_HLTV_TOOLS_VOICE
-	elif grep -q hltv_tools "$PLUGINS_INI" 2>/dev/null; then
-		: "${AMXX_PLUGIN_HLTV_TOOLS:=0}"
-		export AMXX_PLUGIN_HLTV_TOOLS
-	fi
-	# hltv_voice was replaced by hltv_tools
-	if grep -q hltv_voice "$PLUGINS_INI" 2>/dev/null; then
-		: "${AMXX_PLUGIN_HLTV_VOICE:=0}"
-		export AMXX_PLUGIN_HLTV_VOICE
-	fi
-elif on "$ENABLE_HLTV"; then
-	say "warning: without AMX Mod X, HLTV can't tell when players are on: it records all the time"
+	say "AMX Mod X: on"
+else
+	on "$ENABLE_AMXMODX" && say "warning: ENABLE_AMXMODX needs ENABLE_METAMOD, not loading AMX Mod X"
+	say "AMX Mod X: off"
+	on "$ENABLE_HLTV" && say "warning: without AMX Mod X, HLTV can't tell when players are on: it records all the time"
+fi
+if on "$ENABLE_HLTV_VOICE" && [ "$SETTINGS_VOICE" = 0 ]; then
+	say "warning: ENABLE_HLTV_VOICE needs ReGameDLL and AMX Mod X. Use CVAR_SV_ALLTALK=3 instead (spectators hear everyone)"
 fi
 if on "$ENABLE_HLTV"; then
-	[ $voice = 1 ] && say "HLTV: on, with voice" || say "HLTV: on"
+	[ "$SETTINGS_VOICE" = 1 ] && say "HLTV: on, with voice" || say "HLTV: on"
 	say "recording: ${RECORD_IDLE_STOP:-120}s idle stop (0 = always), empty demos deleted: ${DELETE_EMPTY_DEMOS:-1}"
 	on "$ENABLE_VOICE_MKA" && say "voice .mka per demo: on${VOICE_MKA_ARGS:+ ($VOICE_MKA_ARGS)}"
 fi
+:

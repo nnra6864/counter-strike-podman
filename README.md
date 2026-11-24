@@ -104,7 +104,7 @@ They all use port 27015 unless you change `ports` in `compose.yaml`, so only one
 | `presets/` | settings as env files: `defaults.env` for every server, `competitive.env` on top for 5v5 |
 | `image/` | what the image is built from; nothing in it needs editing to run a server |
 | `image/Dockerfile` | builds the image: ReHLDS, ReGameDLL, Metamod-R, AMX Mod X, ReAPI, the plugins, goldsrc-demo-tools |
-| `image/scripts/` | run inside the container on every start: `entrypoint.sh` runs `components.sh` (which components load), `packs.sh` (links the packs in, maps and plugins, see [Packs](#packs)); `cs.sh` is the `cs` command, see [Commands](#commands), `env-config.sh` (applies the environment variables to the configs), and `hltv.sh` (HLTV, recording while players are on; it starts `demos.sh`, which repairs, deletes or writes a `.mka` for each finished demo) |
+| `image/scripts/` | run inside the container on every start: `entrypoint.sh` runs `components.sh` (which components load; `settings.sh` works out what follows from the settings, `common.sh` is shared), `packs.sh` (links the packs in, maps and plugins, see [Packs](#packs)); `cs.sh` is the `cs` command, see [Commands](#commands), `env-config.sh` (applies the environment variables to the configs), and `hltv.sh` (HLTV, recording while players are on; it starts `demos.sh`, which repairs, deletes or writes a `.mka` for each finished demo) |
 | `image/plugins/` | our AMX Mod X plugins, compiled into the image: [hltv-tools](https://github.com/nnra6864/hltv-tools) (a git submodule) |
 | `image/tools/` | [goldsrc-demo-tools](https://github.com/nnra6864/goldsrc-demo-tools) (a git submodule), built into the image |
 | `cstrike/` | the server's files and configs, created on first start, gitignored |
@@ -209,7 +209,7 @@ podman exec counter-strike cs reload         # from the next map change
 podman exec counter-strike cs reload --now   # restarts the current map for it
 ```
 
-New maps can be changed to right away; new plugins load with the next map, which `--now` starts (players reconnect). The container also does this on every start.
+New maps can be changed to right away; new plugins load with the next map, which `--now` starts (players reconnect). The container also does this on every start. Like a start, `cs reload` then applies the environment to the configs again, so a plugin a pack just brought gets its `AMXX_PLUGIN_<NAME>` and a config it just copied its `CVAR_`s. (The environment itself is the container's: after changing an env file, recreate the container.)
 Each URL is downloaded once, and laid out like `cstrike` whatever the archive looks like (loose `.bsp`s go in `maps/`, skies in `gfx/env/`, `.sma`s in `addons/amxmodx/scripting/`). Its source is in `downloads/<name>/.source`, and the file as it came in `downloads/<name>/.original/`. A download with one map is named after the map (the name `changelevel` and the tags file use), one with one plugin after the plugin, anything else after the GameBanana page's title (or the file's name); `name=URL` names it yourself.
 
 The map cycle is every map from the packs, in packlist order (`cstrike/packs_mapcycle.txt`); within a pack, its `mapcycle.txt` first (`default` has the stock one), then the rest by name. `MAPCYCLE: "0"` keeps `mapcycle.txt`.

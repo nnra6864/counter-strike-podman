@@ -8,35 +8,21 @@ if [ ! -e /opt/hlds/cstrike/liblist.gam ]; then
 	cp -a -n /opt/hlds/cstrike_defaults/. /opt/hlds/cstrike/
 fi
 
-# Sourced: it sets defaults for env-config.sh
+# Sourced: puts the components in place, and sets the ENABLE_ defaults and on()
 . /opt/hlds/components.sh
 
 # Maps and other packs (data/packlist), linked into cstrike. Before env-config.sh: a pack
 # can bring plugins
 /opt/hlds/packs.sh || echo "[packs] failed, starting with the maps cstrike has"
-# The map cycle from the packs (MAPCYCLE). Set even while it's empty, so `cs reload` can fill
-# it later
-case $(printf %s "${MAPCYCLE:-1}" | tr '[:upper:]' '[:lower:]') in
-1 | on | true | yes | enable | enabled)
-	: "${CVAR_MAPCYCLEFILE:=packs_mapcycle.txt}"
-	export CVAR_MAPCYCLEFILE
-	;;
-esac
-# Players download the packs' files from FASTDL_URL (fastdl/<name>/ in the library)
-if [ -n "${FASTDL_URL:-}" ]; then
-	: "${CVAR_SV_DOWNLOADURL:=${FASTDL_URL%/}/}"
-	export CVAR_SV_DOWNLOADURL
-fi
-
+# Again, now that the files it looks at are there: what env-config.sh gets from the settings
+. /opt/hlds/settings.sh
 /opt/hlds/env-config.sh || echo "[env] failed to apply env vars, starting with configs as they are"
 
 hltv=
-case $(printf %s "$ENABLE_HLTV" | tr '[:upper:]' '[:lower:]') in
-1 | on | true | yes | enable | enabled)
+if on "$ENABLE_HLTV"; then
 	/opt/hlds/hltv.sh &
 	hltv=$!
-	;;
-esac
+fi
 
 # +maxplayers and +map from MAXPLAYERS and MAP (presets set them), or else from the
 # command. Put back in that order: once +map has started the server, maxplayers is refused

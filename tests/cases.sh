@@ -228,6 +228,30 @@ case_env_config() {
 	cmp -s $T/before $T/after || fail "not the same files after the variables went: $(diff $T/before $T/after | head -n 4)"
 }
 
+# cs reload applies the environment like a start does, without undoing what the
+# entrypoint derived (the map cycle, the download URL, metamod's amxmodx line)
+case_reload_env() {
+	fresh
+	rm -rf $G && cp -a $H/cstrike_defaults $G
+	mkdir -p $D/packs/plugins && sma $D/packs/plugins/foo.sma
+	packlist default
+	set -- ENABLE_HLTV=1 FASTDL_URL=http://host/srv/ AMXX_PLUGIN_FOO=0 CVAR_HOSTNAME=x
+	# What the entrypoint does before starting the server
+	env "$@" sh -c '. /opt/hlds/components.sh && /opt/hlds/packs.sh && . /opt/hlds/settings.sh && /opt/hlds/env-config.sh' >$T/log 2>&1 ||
+		fail "the start failed"
+	grep -q '^mapcyclefile "packs_mapcycle.txt"' $G/server.cfg $G/game.cfg $G/addons/amxmodx/configs/amxx.cfg ||
+		fail "no mapcyclefile"
+	cp -a $G $T/started
+	# The packlist gets plugin foo, which AMXX_PLUGIN_FOO turns off
+	packlist default '*'
+	env "$@" $H/cs.sh reload >$T/log 2>&1 || fail "cs reload failed"
+	grep -q '^;foo.amxx' $G/addons/amxmodx/configs/plugins.ini || fail "foo.amxx not turned off by AMXX_PLUGIN_FOO=0"
+	packlist default
+	env "$@" $H/cs.sh reload >$T/log 2>&1 || fail "cs reload failed"
+	diff -r --no-dereference $T/started $G >$T/diff || fail "not as it was after the start: $(head -n 5 $T/diff)"
+	rm -rf $T/started
+}
+
 # ---------------------------------------------------------------------------------------
 
 all=$(sed -n 's/^case_\([a-z_]*\)() {$/\1/p' "$0")

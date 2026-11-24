@@ -24,12 +24,7 @@ DONE=cstrike/hltv_demos_done.txt
 unset LD_LIBRARY_PATH
 
 say() { echo "[demos] $*"; }
-on() {
-	case $(printf %s "${1:-}" | tr '[:upper:]' '[:lower:]') in
-	1 | on | true | yes | enable | enabled) return 0 ;;
-	esac
-	return 1
-}
+. /opt/hlds/common.sh
 
 finished() {
 	[ "$(od -An -t d4 -j 540 -N 4 "$1" 2>/dev/null | tr -d ' ')" != 0 ]

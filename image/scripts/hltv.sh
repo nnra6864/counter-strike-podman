@@ -29,12 +29,7 @@ if [ -z "${HLTV_SERVERPASSWORD:-}" ] && [ -n "${CVAR_SV_PASSWORD:-}" ]; then
 fi
 
 : "${RECORD_IDLE_STOP:=120}"
-on() {
-	case $(printf %s "${1:-}" | tr '[:upper:]' '[:lower:]') in
-	1 | on | true | yes | enable | enabled) return 0 ;;
-	esac
-	return 1
-}
+. /opt/hlds/common.sh
 # Our 64-bit tool, without HLDS's 32-bit libraries
 tool() { env -u LD_LIBRARY_PATH goldsrc-demo-tools "$@"; }
 
